@@ -16,6 +16,11 @@ const state = {
   isLastLap:             false, // flips true the moment the first player hits discardCount=4 (start of round-end phase)
   lastWinnerIdx:         0,     // index of the player who won the previous round — dealer of the next round
 
+  // Đền (Compensation) state — tracked globally because at most ONE player is
+  // ever liable at a time (chain transfers overwrite the previous one).
+  denLiable:        null, // { stealerIdx, victimIdx } of the most recent Ăn Chốt event, or null
+  pendingTrigger3:  null, // { winnerIdx, victimIdx } when the stolen card immediately completes the stealer's Ù
+
   players: Array(4).fill(null).map(() => ({
     hand:         [],
     laidDown:     [],      // array of phom groups (each group = array of cards)
@@ -25,9 +30,6 @@ const state = {
     cumScore:      0,
     roundScore:    0,
     isMom:        true,    // no phom laid down yet (Móm penalty applies at round end)
-    ateChot:      false,   // stole the final discard
-    gotChot:      false,   // had their final discard stolen
-    denOrder:      0,      // Đền chain: 0=none, higher=later in chain
-    stolenStreak:  0,      // consecutive steals FROM this player (Đền triggers at 3)
+    stolenStreak:  0,      // cumulative steals FROM this player BY their immediate-next-player only — Đền T2 triggers at 3
   })),
 };

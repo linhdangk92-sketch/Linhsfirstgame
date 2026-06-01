@@ -28,11 +28,12 @@ function dealRound() {
     p.discardCount  = 0;
     p.roundScore   = 0;
     p.isMom        = true;
-    p.ateChot      = false;
-    p.gotChot      = false;
-    p.denOrder     = 0;
     p.stolenStreak = 0;
   });
+
+  // Đền state resets — most-recent Ăn Chốt event + any pending T3 marker
+  state.denLiable        = null;
+  state.pendingTrigger3  = null;
 
   // Dealer = winner of previous round; P0 for round 1.
   const dealerIdx = state.roundNumber === 1 ? 0 : state.lastWinnerIdx;

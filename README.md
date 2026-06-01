@@ -29,12 +29,18 @@ A Vietnamese card game (Rummy family) for 1 human player vs 3 AI opponents, buil
 - Human sees "Lay Down / Skip" buttons; AI lays down automatically
 - After lay-down, Gửi: the human can send rác cards to extend opponents' phỏm; AI does it automatically
 - **Móm players cannot Gửi** — zero phỏm laid down means no rác-shrinking; they pay the full penalty
-- Round-end cascade triggers when every player has discarded 4 times (the lap-balancing rule keeps all four discard counts synchronized through steals)
-- All players lay down their phỏm in turn order, then scores are calculated and all AI hands are revealed
+- **Per-player lap-close** — each player closes their own lap when their `discardCount` hits 4: they immediately lay down their phỏm, reveal their hand, and get a gửi step. The rotation keeps spinning so already-laid-down players take *extra turns* (optional steal → draw+discard if still <4 → gửi → otherwise pass)
+- **Lay-down on steal** — a successful steal forces immediate lay-down of the phỏm completed by the stolen card (human picks if multiple configurations are possible); other phỏm stay hidden until lap-close
+- Round ends only when *all players have laid down AND the draw pile is empty* — those two conditions coincide thanks to the lap-balancing rule
 - Round scores: 1st=+6, 2nd=−1, 3rd=−2, last=−3; Móm penalty=−4 paid to winner
+- **Đền (compensation)** — three triggers, all routed through Ù-style endings:
+  - **T1** (you Ăn Chốt then someone else Ù's): you absorb everyone's −5 (net −15); the other two losers end at 0
+  - **T2** (your immediate-next-player has cumulatively stolen 3 of your discards): round ends instantly, stealer is "considered Ù'd" (+15), you pay −15, others end at 0
+  - **T3** (you Ù via the stolen card itself): you pay −5 to the player you ăn chốt'd from (your net +10, victim 0, others normal −5)
+  - Chain transfer: every new Ăn Chốt overwrites who's liable for T1, so only the most-recent stealer is on the hook
 - Ù mid-turn (and Ù Khan at deal time) awards +15 to the winner and −5 to everyone else
 - Multi-round flow works: up to 4 rounds, then game-over screen with final rankings
 - **Game winner gets the Ù Khan celebration** — the elaborate gold-gradient overlay with 30-particle burst fires when the 4 rounds finish, naming the overall winner (or ties)
 - **Auto-sort buttons above the hand** — "Sort by Rank" and "Sort by Suit" reorder cards instantly; manual drag-and-drop reordering still works afterwards
 
-**Up next:** Phase 5 — Ăn Chốt and Đền scoring, plus AI difficulty differentiation.
+**Up next:** "Declare Ù Khan" button and AI difficulty differentiation.

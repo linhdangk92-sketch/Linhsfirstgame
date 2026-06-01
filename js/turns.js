@@ -135,6 +135,13 @@ function performSteal(playerIdx) {
   const card    = state.lastDiscard;
   const prevIdx = (playerIdx - 1 + 4) % 4;
 
+  // Ăn Chốt detection: snapshot the victim's discardCount BEFORE we decrement it.
+  // If they were already at 4 (the lap-close threshold), the card we're about to
+  // steal IS their "final" (4th) discard — stealing it triggers Ăn Chốt for us
+  // and "got chốt'd" for them. Captured here so the lap-balancing logic below
+  // doesn't muddle the reading.
+  const victimWasAtFinal = state.players[prevIdx].discardCount === DISCARD_PILE_LIMIT;
+
   // Step 1: physically remove the card from the stolen-from player's pile
   const prevPile = state.players[prevIdx].discardPile;
   const ci = prevPile.indexOf(card);
@@ -166,7 +173,42 @@ function performSteal(playerIdx) {
   state.lastDiscard           = null;
   state.stealHappenedThisTurn = true;
 
-  setStatus(PLAYER_CFG[playerIdx].name + ' steals ' + card.rank + card.suit + '!');
+  // Step 5: Đền bookkeeping for an Ăn Chốt steal (4th-discard steal).
+  // - state.denLiable tracks the MOST RECENT ăn chốt-er and the player they
+  //   stole from. The chain transfer rule is handled by simply overwriting:
+  //   if a later steal is also an ăn chốt, the new stealer becomes liable and
+  //   the previous one is automatically off the hook.
+  // - state.pendingTrigger3 is set ONLY if this steal IMMEDIATELY completes
+  //   the stealer's Ù — that's the T3 case (you Ù via the stolen card).
+  //   Cleared in declareU after the Ù is processed.
+  if (victimWasAtFinal) {
+    state.denLiable = { stealerIdx: playerIdx, victimIdx: prevIdx };
+    if (checkU(state.players[playerIdx].hand)) {
+      state.pendingTrigger3 = { winnerIdx: playerIdx, victimIdx: prevIdx };
+    }
+  }
+
+  // Step 6: T2 streak — increment the victim's "stolen by immediate-next-player"
+  // counter ONLY when this stealer IS the victim's immediate-next-player
+  // (which is the current code's only-stealable-by-next-player flow today, but
+  // future code might allow further-down-the-rotation steals so the guard is
+  // important). When it hits 3, T2 fires and the round ends instantly.
+  if (playerIdx === (prevIdx + 1) % 4) {
+    state.players[prevIdx].stolenStreak++;
+    if (state.players[prevIdx].stolenStreak >= 3) {
+      const stealerName = PLAYER_CFG[playerIdx].name;
+      const victimName  = PLAYER_CFG[prevIdx].name;
+      setStatus(stealerName + ' steals ' + card.rank + card.suit +
+                ' — ⚡ Đền T2! 3 from ' + victimName + ' — round ends!');
+      state.phase = 'playing';
+      renderAll();
+      setTimeout(() => declareTriggerTwo(playerIdx, prevIdx), 700);
+      return;
+    }
+  }
+
+  const anChotTag = victimWasAtFinal ? '  ⚡ Ăn Chốt!' : '';
+  setStatus(PLAYER_CFG[playerIdx].name + ' steals ' + card.rank + card.suit + '!' + anChotTag);
   state.phase = 'playing';
   renderAll();
 
