@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Phỏm · Tá Lả</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ── Header ────────────────────────────────────────────────── -->
+<div id="header">
+  <h1>Phỏm · Tá Lả</h1>
+  <div id="scoreboard"></div>
+  <div class="round-badge" id="round-badge">Round 1 of 4</div>
+</div>
+
+<!-- ── Game table ─────────────────────────────────────────────── -->
+<div id="table">
+
+  <!-- Top: Hard AI — index 2 — discard pile faces DOWN (towards center) -->
+  <div class="zone top" id="zone-2">
+    <div class="player-info">
+      <span class="avatar" id="avatar-2">🃏</span>
+      <span class="player-name" id="pname-2">—</span>
+      <span class="d-count" id="dcnt-2">0</span>
+    </div>
+    <div class="hand sm-hand" id="hand-2"></div>
+    <div class="dp-phoms-row">
+      <div class="panel-section discard-section">
+        <div class="section-label">Discards</div>
+        <div class="dp-display" id="dp-2"></div>
+      </div>
+      <div class="panel-section phom-section">
+        <div class="section-label">Phỏm</div>
+        <div class="phoms" id="phoms-2"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Left: Medium AI — index 1 (hand only — dp and phoms live in center) -->
+  <div class="zone left" id="zone-1">
+    <div class="player-info">
+      <span class="avatar" id="avatar-1">🃏</span>
+      <span class="player-name" id="pname-1">—</span>
+      <span class="d-count" id="dcnt-1">0</span>
+    </div>
+    <div class="hand sm-hand" id="hand-1"></div>
+  </div>
+
+  <!-- Center: side panels (dp + phoms) flank the draw pile -->
+  <div id="center">
+    <div class="side-panel">
+      <div class="panel-section discard-section">
+        <div class="section-label">Discards</div>
+        <div class="dp-display" id="dp-1"></div>
+      </div>
+      <div class="panel-section phom-section">
+        <div class="section-label">Phỏm</div>
+        <div class="phoms side-phoms" id="phoms-1"></div>
+      </div>
+    </div>
+    <div class="pile-wrap">
+      <div class="pile-label">Draw Pile</div>
+      <div class="draw-stack" id="draw-stack">
+        <div class="card face-down sm"></div>
+        <div class="card face-down sm"></div>
+        <div class="card face-down sm"></div>
+      </div>
+      <div class="pile-count" id="draw-count">— cards</div>
+    </div>
+    <div class="side-panel">
+      <div class="panel-section discard-section">
+        <div class="section-label">Discards</div>
+        <div class="dp-display" id="dp-3"></div>
+      </div>
+      <div class="panel-section phom-section">
+        <div class="section-label">Phỏm</div>
+        <div class="phoms side-phoms" id="phoms-3"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right: Easy AI — index 3 (hand only — dp and phoms live in center) -->
+  <div class="zone right" id="zone-3">
+    <div class="player-info">
+      <span class="avatar" id="avatar-3">🃏</span>
+      <span class="player-name" id="pname-3">—</span>
+      <span class="d-count" id="dcnt-3">0</span>
+    </div>
+    <div class="hand sm-hand" id="hand-3"></div>
+  </div>
+
+  <!-- Bottom: Human — index 0 -->
+  <div class="zone bottom" id="zone-0">
+    <div id="action-bar"></div>
+    <div class="dp-phoms-row">
+      <div class="panel-section discard-section">
+        <div class="section-label">Discards</div>
+        <div class="dp-display" id="dp-0"></div>
+      </div>
+      <div class="panel-section phom-section">
+        <div class="section-label">Phỏm</div>
+        <div class="phoms" id="phoms-0"></div>
+      </div>
+    </div>
+    <!-- Auto-sort toolbar: quick rank/suit organize buttons above the hand.
+         Manual drag-and-drop reordering still works after auto-sorting. -->
+    <div class="hand-toolbar">
+      <button class="sort-btn" id="sort-rank" type="button">Sort by Rank</button>
+      <button class="sort-btn" id="sort-suit" type="button">Sort by Suit</button>
+    </div>
+    <div class="hand" id="hand-0"></div>
+    <div class="player-info">
+      <span class="avatar" id="avatar-0">🎮</span>
+      <span class="player-name" id="pname-0">You</span>
+      <span class="d-count" id="dcnt-0">0 discards</span>
+    </div>
+  </div>
+
+</div>
+
+<!-- ── Ù / Ù Khan celebration overlay (B8) ──────────────────── -->
+<div id="u-celebration"></div>
+
+<!-- ── Status bar ─────────────────────────────────────────────── -->
+<div id="status-bar">
+  <span id="status-msg">Starting game…</span>
+  <span id="status-right"></span>
+</div>
+
+<!-- Scripts load in dependency order: each file can only use globals from files above it -->
+<script src="js/constants.js"></script>
+<script src="js/state.js"></script>
+<script src="js/deck.js"></script>
+<script src="js/phom.js"></script>
+<script src="js/render.js"></script>
+<script src="js/turns.js"></script>
+<script src="js/laydown.js"></script>
+<script src="js/scoring.js"></script>
+<script src="js/main.js"></script>
+
+</body>
+</html>
