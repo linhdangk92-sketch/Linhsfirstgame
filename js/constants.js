@@ -16,8 +16,16 @@ const RANK_ORDER = {A:1,'2':2,'3':3,'4':4,'5':5,'6':6,'7':7,'8':8,'9':9,'10':10,
    tiebreaker when sorting by rank. Order matches the SUITS array above. */
 const SUIT_ORDER = {'♠':0, '♣':1, '♦':2, '♥':3};
 
-const TOTAL_ROUNDS       = 4;
+/* TOTAL_ROUNDS is configurable via the round-picker on the start overlay
+   (S1) — that's why it's `let` rather than `const`. Default is 4; the
+   overlay reassigns this before dealRound() is called for the first time. */
+let   TOTAL_ROUNDS       = 4;
 const DISCARD_PILE_LIMIT = 4; // personal discard pile at 4 → lay-down phase begins
+
+/* S3: when true, the 20s steal/draw and 60s discard timers are disabled —
+   prompts wait indefinitely for the human to click instead of auto-acting.
+   Toggled via the "Slow play" checkbox on the start overlay. */
+let   SLOW_PLAY          = false;
 
 /* Pool of one-word funny AI names — 3 picked at random each game */
 const NAME_POOL = [

@@ -7,14 +7,26 @@
    Round 2+: the winner of the previous round deals.
    The dealer receives 10 cards and plays first; everyone else gets 9. */
 function dealRound() {
-  // Pick new AI names and update avatars at the start of each game
+  // Pick new AI names and update avatars at the start of each game.
+  // S2: preserve any custom human name across "Play Again" by re-applying it
+  // after buildPlayerCfg (which always resets the human slot to 'You').
   if (state.roundNumber === 1) {
+    const previousHumanName = PLAYER_CFG[0] && PLAYER_CFG[0].name;
     PLAYER_CFG = buildPlayerCfg();
+    if (previousHumanName && previousHumanName !== 'You') {
+      PLAYER_CFG[0].name = previousHumanName;
+    }
     [0, 1, 2, 3].forEach(i => {
       const nameEl   = document.getElementById('pname-'  + i);
       const avatarEl = document.getElementById('avatar-' + i);
       if (nameEl)   nameEl.textContent   = PLAYER_CFG[i].name;
-      if (avatarEl) avatarEl.textContent = AVATAR_MAP[PLAYER_CFG[i].name] || '🃏';
+      // The human always wears the 🎮 emoji regardless of custom name —
+      // AVATAR_MAP only has entries for 'You' + AI names from the pool.
+      if (avatarEl) {
+        avatarEl.textContent = PLAYER_CFG[i].isHuman
+          ? '🎮'
+          : (AVATAR_MAP[PLAYER_CFG[i].name] || '🃏');
+      }
     });
   }
 
@@ -78,4 +90,39 @@ function dealRound() {
 }
 
 // ── Start ─────────────────────────────────────────────────────────
-dealRound();
+// Gate the first deal behind a round-count pick on the start-overlay (S1).
+// The button click ALSO satisfies the browser's "user gesture" requirement
+// that unlocks the AudioContext — without it, round-1 shuffle/deal sounds
+// would be silently dropped.
+const _startOverlay = document.getElementById('start-overlay');
+if (_startOverlay) {
+  const roundBtns = _startOverlay.querySelectorAll('.round-btn');
+  const nameInput = document.getElementById('player-name-input');
+  const slowInput = document.getElementById('slow-play-input');
+  let started = false; // guard against double-clicks during the 400ms fade
+  roundBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (started) return;
+      started = true;
+      // Update the global TOTAL_ROUNDS from the button's data attribute.
+      // scoring.js reads this at every round-end to decide game-over.
+      TOTAL_ROUNDS = parseInt(btn.dataset.rounds, 10);
+      // S2: trim + fall back to 'You' if blank. Browser caps length at 12 via
+      // the maxlength attribute. textContent (used in the render path) escapes
+      // any HTML the user types, so no XSS risk.
+      const typedName = (nameInput && nameInput.value || '').trim();
+      if (typedName) PLAYER_CFG[0].name = typedName;
+      // S3: capture the slow-play preference. turns.js checks SLOW_PLAY when
+      // deciding whether to start the steal/draw and discard timers.
+      SLOW_PLAY = !!(slowInput && slowInput.checked);
+      _startOverlay.classList.add('dismissed');
+      setTimeout(() => _startOverlay.remove(), 400);
+      // Tap the audio context awake so shuffle/deal sounds play on round 1.
+      if (typeof ensureAudioContext === 'function') ensureAudioContext();
+      dealRound();
+    });
+  });
+} else {
+  // Fallback in case the overlay element was removed
+  dealRound();
+}

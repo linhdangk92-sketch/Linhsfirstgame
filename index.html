@@ -8,6 +8,35 @@
 </head>
 <body>
 
+<!-- ── Start overlay with round-count picker (S1) ──────────────
+     Shown on first page load. The picker click unlocks the browser audio
+     context (modern browsers block audio until a user gesture) and ALSO
+     lets the player choose how many rounds the game runs for. -->
+<div id="start-overlay" class="start-overlay">
+  <div class="start-card">
+    <h2>Phỏm · Tá Lả</h2>
+    <!-- S2: optional name entry. Blank → defaults to "You". maxlength caps
+         the name so it never wraps the .player-name pill on the table. -->
+    <p class="start-label">Your name (optional)</p>
+    <input id="player-name-input" class="name-input"
+           type="text" maxlength="12" placeholder="You" autocomplete="off">
+    <p class="start-label">How many rounds?</p>
+    <div class="round-picker">
+      <button class="round-btn" data-rounds="3"  type="button">3</button>
+      <button class="round-btn" data-rounds="4"  type="button">4</button>
+      <button class="round-btn" data-rounds="5"  type="button">5</button>
+      <button class="round-btn" data-rounds="7"  type="button">7</button>
+      <button class="round-btn" data-rounds="10" type="button">10</button>
+    </div>
+    <!-- S3: optional slow-play mode. When checked, the steal/draw 20s and
+         discard 60s timers are disabled so prompts wait for the click. -->
+    <label class="slow-play-toggle">
+      <input id="slow-play-input" type="checkbox">
+      <span>Slow play (no timers)</span>
+    </label>
+  </div>
+</div>
+
 <!-- ── Header ────────────────────────────────────────────────── -->
 <div id="header">
   <h1>Phỏm · Tá Lả</h1>

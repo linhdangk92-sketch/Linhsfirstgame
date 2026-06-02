@@ -339,15 +339,16 @@ function runLapClose(playerIdx, onDone) {
   // First lap-close in the round flips the global into "last lap" mode.
   state.isLastLap = true;
 
-  // Detect the optimal phỏm partition BEFORE locking it in — so the human
-  // can review and confirm. (player.isMom is already false if any phỏm was
-  // laid down via a steal earlier; lockInPhoms below keeps it accurate.)
-  const { groups } = findBestPhoms(player.hand);
+  // Detect ALL equally-optimal phỏm partitions. P6: if the human has more
+  // than one tie, they get to pick which one to lay down. Otherwise the
+  // single optimal is used (matches the previous findBestPhoms behavior).
+  const allBest       = findAllBestPhoms(player.hand);
+  const defaultGroups = allBest[0].groups;
 
-  /* The actual lock-in + reveal + gửi step, fired once the human confirms
-     (or immediately for AI / Móm-human). */
-  const finalize = () => {
-    if (groups.length > 0) lockInPhoms(playerIdx, groups);
+  /* The actual lock-in + reveal + gửi step. Takes the CHOSEN partition's
+     groups (or the default first one for AI / single-option / Móm-human). */
+  const finalize = (chosenGroups) => {
+    if (chosenGroups.length > 0) lockInPhoms(playerIdx, chosenGroups);
 
     // Reveal the hand. renderHands flips face-down → face-up via player.hasLaidDown.
     player.hasLaidDown = true;
@@ -356,8 +357,8 @@ function runLapClose(playerIdx, onDone) {
     player.lapClosedAt = ++state.lapCloseCounter;
     renderAll();
 
-    const summary = groups.length > 0
-      ? groups.map(g => '[' + g.map(c => c.rank + c.suit).join(' ') + ']').join(' ')
+    const summary = chosenGroups.length > 0
+      ? chosenGroups.map(g => '[' + g.map(c => c.rank + c.suit).join(' ') + ']').join(' ')
       : (player.laidDown.length === 0 ? '(Móm — no phỏm)' : '(no remaining phỏm)');
     setStatus(cfg.name + ' lap-closes ' + summary);
 
@@ -370,28 +371,35 @@ function runLapClose(playerIdx, onDone) {
     setTimeout(() => handleGuiStep(playerIdx, onDone), 800);
   };
 
-  // Human + has phỏm to lay down → show confirmation in action bar.
-  if (cfg.isHuman && groups.length > 0) {
+  // P6: human with multiple equally-optimal partitions → show one button
+  // per option. The player picks; that partition is what gets laid down.
+  if (cfg.isHuman && allBest.length > 1) {
     state.phase = 'laydown-prompt';
+    setStatus('Lap-close! ' + allBest.length + ' equally good ways to lay down — pick one.');
 
-    const label = document.createElement('span');
-    label.style.cssText = 'font-size:0.72rem; color:#1A4731; font-weight:700; white-space:nowrap;';
-    label.textContent = 'Lap-close phỏm: ' + groups.map(
-      g => '[' + g.map(c => c.rank + c.suit).join(' ') + ']'
-    ).join('  ');
-
-    const btn = makeBtn('Confirm Lay Down', 'btn-laydown', () => {
-      renderActionBar([]);
-      state.phase = 'playing';
-      finalize();
+    const btns = allBest.map((option) => {
+      const labelText = option.groups.map(
+        g => '[' + g.map(c => c.rank + c.suit).join(' ') + ']'
+      ).join(' ');
+      return makeBtn(
+        labelText,
+        'btn-laydown',
+        () => {
+          renderActionBar([]);
+          state.phase = 'playing';
+          finalize(option.groups);
+        }
+      );
     });
 
-    setStatus('Lap-close! Review your phỏm and confirm to lay down.');
-    renderActionBar([label, btn]);
+    renderActionBar(btns);
     return;
   }
 
-  // AI or Móm-human → finalize immediately
-  finalize();
+  // Single optimal partition (or AI, or Móm, or empty hand) → just lay it
+  // down automatically. No confirmation needed when there's no choice to
+  // make — the picker UI only shows when there's an actual ambiguity to
+  // resolve (handled above when allBest.length > 1).
+  finalize(defaultGroups);
 }
 

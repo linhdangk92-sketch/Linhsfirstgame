@@ -684,6 +684,8 @@ function showAnChotToast(playerIdx) {
    Distinct dark-slate coloring so it's never mistaken for the yellow Ăn Chốt. */
 function showMomToast(playerIdx) {
   _showPlayerToast(playerIdx, 'mom-toast', '💀 Móm!');
+  // Descending "wah-wah-waaah" so the penalty moment has audible weight too.
+  soundMom();
 }
 
 /* Show a per-player score-change toast (used by Đền payments). Positive deltas

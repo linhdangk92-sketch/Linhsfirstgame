@@ -376,6 +376,10 @@ function endRound() {
   ).join('  ·  ');
   setStatus('Round ' + state.roundNumber + ' over!  ' + summary);
 
+  // Bright four-note arpeggio when a normal round-end win is revealed.
+  // Lighter than soundU so it doesn't compete with the Ù fanfare.
+  soundRoundWin();
+
   // The reveal: modal with the breakdown + "Add to Scoreboard" button.
   // Clicking the button calls renderScores (scoreboard finally updates) and
   // surfaces the Next Round button.
@@ -434,9 +438,7 @@ function showRoundRecap(roundNum, results, onContinue) {
     tagsEl.className = 'recap-tags';
     /* The tag column shows a row-specific note. The caller can set r.tag
        directly for custom text (e.g., "Đền refund −5+5" on the T3 victim
-       row to explain why their score is 0). If no custom tag is provided,
-       fall back to the "Nth Móm" sub-ranking label for Móm players, and
-       blank for everyone else. */
+       row). If no custom tag, fall back to "Nth Móm" for Móm players. */
     let tagText = r.tag || '';
     if (!tagText && r.isMom) tagText = ordinal(r.momPosition) + ' Móm';
     tagsEl.textContent = tagText;
@@ -495,6 +497,8 @@ function showGameOver() {
   const winText  = winners.length === 1
     ? winners[0].name + ' WINS THE GAME! 🏆'
     : winners.map(w => w.name).join(' & ') + ' TIE FOR THE WIN! 🏆';
+  // Grand five-note fanfare — the biggest sound for the biggest moment.
+  soundGameWin();
   // isKhan=true → reuse the Ù Khan visuals (gold gradient, pulsing glow, 30-particle burst, 4s).
   showUCelebration(winners[0].name, true, winText);
 

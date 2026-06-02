@@ -90,20 +90,43 @@ function combinations(arr, k) {
 
    Returns { groups: [[...cards], ...], rac: [...cards] }. */
 function findBestPhoms(hand) {
+  return findAllBestPhoms(hand)[0];
+}
+
+/* P6: like findBestPhoms but returns EVERY equally-optimal partition (i.e.
+   every partition with the same minimum rác value), in canonical search
+   order. The first entry is what findBestPhoms returns. When the hand has
+   only one optimal partition, the array has length 1.
+
+   Used by the human lay-down UI so the player can pick between tied
+   configurations — e.g., a single 5 that could fit into either a sám cô
+   (5♠5♣5♦) or a thông (4♠5♠6♠) where total rác is the same either way.
+
+   Algorithm is the same backtracking as findBestPhoms but the prune is
+   `>` (strictly worse) instead of `>=`, so equal candidates are explored
+   instead of discarded. Canonical "first card must be in extracted group
+   or locked as rác" still visits each unique partition exactly once. */
+function findAllBestPhoms(hand) {
   const sumValues = arr => arr.reduce((s, c) => s + RANK_VALUE[c.rank], 0);
 
-  let best       = { groups: [], rac: hand.slice() };
-  let bestRacVal = sumValues(hand);
+  // Start empty — `search` will populate allBest as it explores. The previous
+  // code pre-seeded an "all-rác" partition here, which caused duplicate
+  // entries when the hand has no valid phỏm (the search reaches the same
+  // partition and pushes it again as a tie), making allBest.length === 2 and
+  // triggering the multi-option picker UI for no reason.
+  let allBest    = [];
+  let bestRacVal = Infinity;
 
   function search(remaining, racSoFar, groups) {
     const racValSoFar = sumValues(racSoFar);
-    if (racValSoFar >= bestRacVal) return; // prune — can't beat best
+    if (racValSoFar > bestRacVal) return; // strictly worse — prune
 
     if (remaining.length === 0) {
-      // Leaf: everything decided. racSoFar is the candidate rác.
       if (racValSoFar < bestRacVal) {
         bestRacVal = racValSoFar;
-        best = { groups: groups.slice(), rac: racSoFar.slice() };
+        allBest = [{ groups: groups.slice(), rac: racSoFar.slice() }];
+      } else if (racValSoFar === bestRacVal) {
+        allBest.push({ groups: groups.slice(), rac: racSoFar.slice() });
       }
       return;
     }
@@ -111,8 +134,6 @@ function findBestPhoms(hand) {
     const first = remaining[0];
     const rest  = remaining.slice(1);
 
-    // Try every phỏm containing `first` (4-card first so good solutions
-    // surface early and the prune fires more aggressively on later branches).
     if (rest.length >= 3) {
       for (const combo of combinations(rest, 3)) {
         const group = [first, ...combo];
@@ -132,12 +153,11 @@ function findBestPhoms(hand) {
       }
     }
 
-    // Last branch: `first` is rác (locked). Continue with the remaining cards.
     search(rest, [...racSoFar, first], groups);
   }
 
   search(hand.slice(), [], []);
-  return best;
+  return allBest;
 }
 
 // ── Ù Detection ───────────────────────────────────────────────────

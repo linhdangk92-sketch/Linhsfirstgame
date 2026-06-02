@@ -103,23 +103,12 @@ function showHumanUKhanPrompt() {
 
 // ── Steal / Draw ──────────────────────────────────────────────────
 
-/* Show Steal and Draw buttons with a 5-second countdown.
-   The Steal button is disabled when the card doesn't complete any phỏm. */
+/* Show Steal and Draw buttons with a 20-second countdown.
+   The Steal button is disabled when the card doesn't complete any phỏm.
+   S3: when SLOW_PLAY is on, the countdown bar is omitted and no auto-draw
+   interval is started — the prompt waits for the human to click. */
 function showStealDrawUI(canDoSteal, disc) {
   state.phase = 'steal-prompt';
-
-  // Build timer bar UI
-  const wrap  = document.createElement('div');
-  wrap.className = 'steal-timer-wrap';
-  const track = document.createElement('div');
-  track.className = 'steal-timer-track';
-  const fill  = document.createElement('div');
-  fill.className = 'steal-timer-fill';
-  const label = document.createElement('div');
-  label.className = 'steal-timer-label';
-  track.appendChild(fill);
-  wrap.appendChild(track);
-  wrap.appendChild(label);
 
   const btnSteal = makeBtn('Steal', 'btn-steal', () => {
     clearAllTimers(); clearStealable();
@@ -135,20 +124,38 @@ function showStealDrawUI(canDoSteal, disc) {
     performDraw(0);
   });
 
+  const promptMsg = canDoSteal
+    ? 'Steal the ' + disc.rank + disc.suit + ' or draw?'
+    : disc.rank + disc.suit + ' doesn\'t help your hand — draw from the pile?';
+
+  // S3: in slow-play mode, skip the timer bar + interval entirely.
+  if (SLOW_PLAY) {
+    renderActionBar([btnSteal, btnDraw]);
+    setStatus(promptMsg);
+    return;
+  }
+
+  // Normal mode — build the timer bar and run the 20s auto-draw countdown.
+  const wrap  = document.createElement('div');
+  wrap.className = 'steal-timer-wrap';
+  const track = document.createElement('div');
+  track.className = 'steal-timer-track';
+  const fill  = document.createElement('div');
+  fill.className = 'steal-timer-fill';
+  const label = document.createElement('div');
+  label.className = 'steal-timer-label';
+  track.appendChild(fill);
+  wrap.appendChild(track);
+  wrap.appendChild(label);
+
   renderActionBar([wrap, btnSteal, btnDraw]);
 
-  // Start 20-second countdown; auto-draw on expiry
   let timeLeft = 20;
   fill.style.width = '100%';
   label.textContent = timeLeft + 's';
   setTimeout(() => { fill.style.width = '0%'; }, 30); // trigger CSS transition
 
-  setStatus(
-    canDoSteal
-      ? 'Steal the ' + disc.rank + disc.suit + ' or draw?'
-      : disc.rank + disc.suit + ' doesn\'t help your hand — draw from the pile?',
-    timeLeft + 's'
-  );
+  setStatus(promptMsg, timeLeft + 's');
 
   timers.steal = setInterval(() => {
     timeLeft--;
@@ -160,6 +167,39 @@ function showStealDrawUI(canDoSteal, disc) {
       performDraw(0); // auto-draw when timer expires
     }
   }, 1000);
+}
+
+/* A3: Hard AI steal decision — should we actually accept this steal?
+   The default flow always steals when canSteal returns true, but a stolen
+   small-value phỏm forces a public lay-down (revealing structure to opponents)
+   AND triggers the lap-balancing cost — both of which can outweigh the tiny
+   rác gain from a phỏm like 234 or AAA.
+
+   Rule:
+   • Ù-completing steal → always (winning the round trumps everything).
+   • 4-card phỏm → always (more cards locked, more rác saved, harder to revoke).
+   • 3-card phỏm with rank-value sum ≥ 12 → always (e.g. 345, 456, JJJ, KKK).
+   • Otherwise (e.g. 234 = 9, AAA = 3, 222 = 6, 333 = 9) → skip and draw instead.
+
+   Medium and Easy always steal when canSteal allows — they don't run through
+   this filter. That preserves the distinct feel of the three difficulties. */
+function hardShouldSteal(card, hand) {
+  // Ù-completing steal: the 10-card post-steal hand fully partitions into phỏm
+  // and would Ù immediately via checkAndHandleU in performSteal.
+  if (checkU([...hand, card])) return true;
+
+  // Find every phỏm the stolen card could complete; AI would lay down the
+  // biggest (most cards) one — sort that way and inspect [0].
+  const options = findStealPhoms(card, hand);
+  if (options.length === 0) return false; // defensive — canSteal should have guarded this
+  options.sort((a, b) => b.length - a.length);
+  const best = options[0];
+
+  if (best.length === 4) return true; // 4-card lock-in always worth it
+
+  // 3-card phỏm — apply the rank-value threshold.
+  const valueSum = best.reduce((s, c) => s + RANK_VALUE[c.rank], 0);
+  return valueSum >= 12;
 }
 
 /* Check if playerIdx has Ù (all cards form valid phỏm, zero rác left over).
@@ -344,11 +384,17 @@ function performDraw(playerIdx) {
 // ── Discard ───────────────────────────────────────────────────────
 
 /* Switch to discard phase: human's hand becomes click-to-discard.
-   A 60-second timer auto-discards on expiry. */
+   A 60-second timer auto-discards on expiry. S3: in slow-play mode the timer
+   is skipped and the prompt simply waits for a drag-to-discard. */
 function showDiscardUI() {
   state.phase = 'discard-prompt';
   renderActionBar([]);
   renderHumanHand(true); // cards become clickable; each click calls performDiscard directly
+
+  if (SLOW_PLAY) {
+    setStatus('Drag a card to the center to discard it.');
+    return;
+  }
 
   let timeLeft = 60;
   setStatus('Drag a card to the center to discard it.', timeLeft + 's');
@@ -443,10 +489,15 @@ function advanceTurn() {
 /* AI turn: steal if it completes a phỏm, otherwise draw.
    Special case: the very first turn of the round when the AI is the dealer —
    `lastDiscard` is still null, they already have 10 cards from the deal, and
-   they should just discard (no draw). */
+   they should just discard (no draw).
+
+   A3: Hard AI runs the steal through hardShouldSteal — a low-value 3-card
+   phỏm may be skipped in favor of a fresh deck draw. Medium and Easy always
+   accept any valid steal (unchanged). */
 function runAiTurn() {
   const playerIdx = state.currentTurn;
   const player    = state.players[playerIdx];
+  const cfg       = PLAYER_CFG[playerIdx];
   const disc      = state.lastDiscard;
 
   if (!disc) {
@@ -455,7 +506,11 @@ function runAiTurn() {
   }
 
   if (canSteal(disc, player.hand)) {
-    performSteal(playerIdx);
+    if (cfg.difficulty === 'hard' && !hardShouldSteal(disc, player.hand)) {
+      performDraw(playerIdx);
+    } else {
+      performSteal(playerIdx);
+    }
   } else {
     performDraw(playerIdx);
   }
@@ -472,61 +527,78 @@ function aiDiscard(playerIdx) {
    considered, and (2) the probability of picking the top-scored card vs.
    making a "mistake" (a random non-optimal pick).
 
-   Scoring components per card in hand:
+   Scoring components per card in hand (A2: per-card WEIGHTS rather than
+   binary flags — a card that participates in multiple potential phỏm is
+   worth proportionally more than one that participates in just one):
 
-   ownUseful — card pairs up with another hand card by any of these patterns
+   ownWeight — number of "phỏm-forming partnerships" this card has, where a
+     partnership is any other hand card that matches one of these patterns
      (recognized by ALL difficulties):
        • same rank (potential sám cô)
        • same suit, adjacent rank (potential thông)
        • same suit, 2-rank gap (potential thông via the missing middle card)
-     ALSO: card could extend the AI's OWN laid-down phỏm via gửi at end of
-     round. Same idea — it's a card worth keeping.
+     PLUS: +1 for each of the AI's OWN laid-down phỏm that this card could
+     extend via gửi at round end.
+     Example: a 5♠ paired with 5♥, 5♦, 4♠, AND 6♠ has ownWeight = 4 — losing
+     it would collapse multiple potential phỏm at once.
 
-   oppFeed — card could extend ANY opponent's laid-down phỏm via gửi
-     (Medium + Hard only — Easy skips this and plays purely self-focused).
+   oppWeight — number of OPPONENT laid-down phỏm this card could extend via
+     gửi (Medium + Hard only — Easy skips this and plays purely self-focused).
+     A card that could feed three opponent groups is much riskier to discard
+     than one that could only feed one.
 
-   keepScore = 2*(ownUseful?1:0) + 1*(oppFeed?1:0). Higher = keep, lower =
-   safer to discard. Tiebreak: higher value goes first (dump high-rác cards
-   ahead of low-rác).
+   keepScore = ownWeight * 2 + oppWeight * 1. Higher = keep, lower = safer to
+   discard. Own contributions count double because they directly build YOUR
+   score, while opp-feed only avoids giving away rác. Tiebreak: higher value
+   goes first (dump high-rác cards ahead of low-rác).
 
    Mistake model — probability of picking the top-scored card:
      hard   : 90% optimal, 10% random non-optimal
      medium : 75% optimal, 25% random non-optimal
      easy   : 40% optimal, 60% random non-optimal (own-only scoring) */
 function aiBestDiscard(hand, difficulty, playerIdx) {
-  // ─── Step 1: ownUseful set ───────────────────────────────────────
-  const ownUseful = new Set();
+  // ─── Step 1: ownWeight per card — count phỏm-forming partnerships ──
+  // Each matching pair contributes +1 to BOTH cards' weights, so a hand-card
+  // that's central to many potential phỏm naturally accumulates a higher
+  // weight than one with a single pairing.
+  const ownWeight = new Array(hand.length).fill(0);
   for (let i = 0; i < hand.length; i++) {
     for (let j = i + 1; j < hand.length; j++) {
       const a   = hand[i], b = hand[j];
       const dRk = Math.abs(RANK_ORDER[a.rank] - RANK_ORDER[b.rank]);
-      if (a.rank === b.rank)                            { ownUseful.add(i); ownUseful.add(j); }
-      if (a.suit === b.suit && (dRk === 1 || dRk === 2)) { ownUseful.add(i); ownUseful.add(j); }
+      const sameRank = a.rank === b.rank;
+      const sameSuitNear = a.suit === b.suit && (dRk === 1 || dRk === 2);
+      if (sameRank || sameSuitNear) { ownWeight[i]++; ownWeight[j]++; }
     }
   }
-  // Own laid-down extensions — could be gửi'd at end of round.
+  // Own laid-down extensions — +1 per OWN group this card could gửi to.
   if (playerIdx !== undefined && state.players[playerIdx]) {
     state.players[playerIdx].laidDown.forEach(group => {
-      hand.forEach((card, i) => { if (canGui(card, group)) ownUseful.add(i); });
+      hand.forEach((card, i) => { if (canGui(card, group)) ownWeight[i]++; });
     });
   }
 
-  // ─── Step 2: oppFeed set (skipped for Easy) ──────────────────────
-  const oppFeed = new Set();
+  // ─── Step 2: oppWeight per card (skipped for Easy) ───────────────
+  // +1 per OPPONENT group this card could extend via gửi. A card that could
+  // feed multiple opponent phỏm is proportionally riskier to discard.
+  const oppWeight = new Array(hand.length).fill(0);
   if (difficulty !== 'easy' && playerIdx !== undefined) {
     state.players.forEach((p, pIdx) => {
-      if (pIdx === playerIdx) return; // skip self — that's ownUseful's job
+      if (pIdx === playerIdx) return; // skip self — that's ownWeight's job
       p.laidDown.forEach(group => {
-        hand.forEach((card, i) => { if (canGui(card, group)) oppFeed.add(i); });
+        hand.forEach((card, i) => { if (canGui(card, group)) oppWeight[i]++; });
       });
     });
   }
 
   // ─── Step 3: score + sort ─────────────────────────────────────────
+  // Own counts double — building our own phỏm is worth more than just
+  // blocking an opponent's gửi. The 2:1 ratio matches the previous binary
+  // weights (ownUseful=2 vs oppFeed=1) so difficulty tuning still holds.
   const scored = hand.map((card, i) => ({
     card, i,
     value:     RANK_VALUE[card.rank],
-    keepScore: (ownUseful.has(i) ? 2 : 0) + (oppFeed.has(i) ? 1 : 0),
+    keepScore: ownWeight[i] * 2 + oppWeight[i],
   }));
   scored.sort((a, b) => {
     if (a.keepScore !== b.keepScore) return a.keepScore - b.keepScore; // safer first

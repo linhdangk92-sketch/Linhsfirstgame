@@ -1026,3 +1026,296 @@ body {
 .flying-card.flying-reveal {
   box-shadow: 0 0 36px rgba(245, 197, 24, 0.62), 0 18px 42px rgba(0, 0, 0, 0.35);
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   P9 — Responsive: tablet + large-phone-landscape pass.
+   Two breakpoints scale card sizes, tighten gaps, and narrow the side
+   columns. Below ~480px (smartphone-portrait) the 3-column table grid
+   doesn't really work; that's a separate restructure (TODO).
+   ═══════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 1024px) {
+  /* Tighter table grid — narrower side columns, smaller gaps */
+  #table {
+    gap: 6px;
+    padding: 8px 12px;
+    grid-template-columns: 180px 1fr 180px;
+    grid-template-rows: auto minmax(0, 1fr) 320px;
+  }
+
+  /* Card sizes shrink ~12% */
+  .card {
+    width: 84px;
+    height: 122px;
+    padding: 6px 7px;
+  }
+  .card.sm { width: 56px; height: 82px; padding: 4px 6px; }
+  .card.xs { width: 50px; height: 72px; padding: 3px 4px; }
+
+  /* Card text scales with cards */
+  .c-rank { font-size: 1.08rem; }
+  .c-suit { font-size: 0.74rem; }
+  .c-mid  { font-size: 2.4rem; }
+  .card.sm .c-rank { font-size: 0.75rem; }
+  .card.sm .c-suit { font-size: 0.6rem;  }
+  .card.sm .c-mid  { font-size: 1.36rem; }
+  .card.xs .c-rank { font-size: 0.72rem; }
+  .card.xs .c-suit { font-size: 0.58rem; }
+  .card.xs .c-mid  { font-size: 1.25rem; }
+
+  /* Hand overlap tighter so 9-card hands still fit */
+  .hand .card ~ .card { margin-left: -36px; }
+  .hand.sm-hand .card:not(:first-child) { margin-left: -22px; }
+  .zone.left  .sm-hand .card:not(:first-child),
+  .zone.right .sm-hand .card:not(:first-child) { margin-left: -36px; }
+
+  /* Discard pile + phỏm group shrink to match new xs card width */
+  .dp-display { width: 90px; height: 72px; }
+  .dp-display .card:nth-child(2) { left: 8px;  }
+  .dp-display .card:nth-child(3) { left: 16px; }
+  .dp-display .card:nth-child(4) { left: 24px; }
+  .phom-group { width: 72px; height: 80px; }
+  .phom-group .card:nth-child(2) { left: 8px;  }
+  .phom-group .card:nth-child(3) { left: 16px; }
+  .phom-group .card:nth-child(4) { left: 24px; }
+
+  /* Header compact */
+  #header { padding: 6px 14px; }
+  #header h1 { font-size: 0.92rem; letter-spacing: 0.09em; }
+  .score-cell { padding: 3px 9px; }
+  .s-name { font-size: 0.62rem; }
+  .s-val  { font-size: 0.78rem; }
+
+  /* Center gap tighter */
+  #center { gap: 40px; }
+
+  /* Discard-zone bottom anchor shifts with the shorter bottom zone */
+  #discard-zone { bottom: 170px; }
+}
+
+@media (max-width: 720px) {
+  /* Even tighter for large phones in landscape */
+  #table {
+    gap: 4px;
+    padding: 5px 8px;
+    grid-template-columns: 130px 1fr 130px;
+    grid-template-rows: auto minmax(0, 1fr) 260px;
+  }
+
+  /* Card sizes shrink another ~17% */
+  .card {
+    width: 70px;
+    height: 100px;
+    padding: 4px 5px;
+    border-radius: 8px;
+  }
+  .card.sm { width: 46px; height: 68px; padding: 3px 4px; border-radius: 7px; }
+  .card.xs { width: 42px; height: 60px; padding: 2px 3px; border-radius: 6px; }
+
+  .c-rank { font-size: 0.9rem; }
+  .c-suit { font-size: 0.64rem; }
+  .c-mid  { font-size: 1.95rem; }
+  .card.sm .c-rank { font-size: 0.62rem; }
+  .card.sm .c-suit { font-size: 0.52rem; }
+  .card.sm .c-mid  { font-size: 1.08rem; }
+  .card.xs .c-rank { font-size: 0.58rem; }
+  .card.xs .c-suit { font-size: 0.5rem;  }
+  .card.xs .c-mid  { font-size: 1rem; }
+
+  .hand .card ~ .card { margin-left: -30px; }
+  .hand.sm-hand .card:not(:first-child) { margin-left: -16px; }
+  .zone.left  .sm-hand .card:not(:first-child),
+  .zone.right .sm-hand .card:not(:first-child) { margin-left: -28px; }
+
+  .dp-display { width: 75px; height: 60px; }
+  .dp-display .card:nth-child(2) { left: 6px;  }
+  .dp-display .card:nth-child(3) { left: 12px; }
+  .dp-display .card:nth-child(4) { left: 18px; }
+  .phom-group { width: 60px; height: 68px; }
+  .phom-group .card:nth-child(2) { left: 6px;  }
+  .phom-group .card:nth-child(3) { left: 12px; }
+  .phom-group .card:nth-child(4) { left: 18px; }
+
+  #header { padding: 4px 10px; }
+  #header h1 { font-size: 0.78rem; letter-spacing: 0.08em; }
+  .score-cell { padding: 2px 7px; }
+  .s-name { font-size: 0.55rem; }
+  .s-val  { font-size: 0.7rem; }
+  .round-badge { font-size: 0.62rem; padding: 3px 8px; }
+
+  .mute-btn { width: 30px; height: 30px; font-size: 0.85rem; }
+
+  #center { gap: 20px; }
+
+  /* Sort buttons get more compact too */
+  .sort-btn { font-size: 0.55rem; padding: 3px 8px; }
+
+  /* Status bar shorter, smaller text */
+  #status-bar { padding: 4px 12px; }
+  #status-msg { font-size: 0.66rem; }
+  #status-right { font-size: 0.6rem; }
+
+  /* Discard zone anchor moves with shorter bottom zone */
+  #discard-zone { bottom: 140px; }
+
+  /* Recap modal: drop min-width so it fits on small viewports */
+  .recap-card { min-width: 280px; padding: 22px 24px; }
+  .recap-title { font-size: 1.15rem; }
+}
+
+/* ── Click-to-start overlay ─────────────────────────────────
+   Full-screen click trap shown on first page load. Doubles as the
+   user-gesture trigger that unlocks the browser AudioContext so
+   round-1 shuffle + deal sounds actually play. Fades + removes once
+   dismissed (JS in main.js handles the click + transition out). */
+.start-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(26, 71, 49, 0.95);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  transition: opacity 0.35s ease;
+}
+.start-overlay.dismissed {
+  opacity: 0;
+  pointer-events: none;
+}
+.start-card {
+  background: linear-gradient(135deg, #FFF8F0, #F5F0E4);
+  padding: 44px 64px;
+  border-radius: 18px;
+  border: 3px solid #F5C518;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55);
+  text-align: center;
+  transform: scale(1);
+  animation: start-card-pulse 1.6s ease-in-out infinite;
+}
+.start-card h2 {
+  font-size: 1.8rem;
+  font-weight: 900;
+  color: #1A4731;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin: 0 0 12px 0;
+}
+.start-card p {
+  font-size: 0.95rem;
+  color: rgba(26, 71, 49, 0.7);
+  margin: 0 0 18px 0;
+  letter-spacing: 0.04em;
+}
+/* S2: smaller label variant for stacked sections inside the start card
+   (name + rounds). Tighter bottom margin so the input/picker sits close. */
+.start-card .start-label {
+  font-size: 0.78rem;
+  margin: 0 0 8px 0;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.start-card .start-label:not(:first-of-type) {
+  margin-top: 18px; /* breathing room between "name" and "rounds" sections */
+}
+.name-input {
+  width: 220px;
+  max-width: 100%;
+  padding: 9px 12px;
+  font-family: inherit;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #1A4731;
+  background: #FFFEF8;
+  border: 2px solid #1A4731;
+  border-radius: 10px;
+  text-align: center;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.name-input:focus {
+  border-color: #F5C518;
+  box-shadow: 0 0 0 3px rgba(245, 197, 24, 0.3);
+}
+.name-input::placeholder {
+  color: rgba(26, 71, 49, 0.35);
+  font-weight: 600;
+}
+
+/* S3: slow-play checkbox toggle. Styled to match the cream/gold theme of
+   the rest of the start card. The native checkbox is hidden and a custom
+   square is drawn via the label, with a checkmark shown when :checked. */
+.slow-play-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 18px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #1A4731;
+  letter-spacing: 0.04em;
+  user-select: none;
+}
+.slow-play-toggle input {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border: 2px solid #1A4731;
+  border-radius: 4px;
+  background: #FFFEF8;
+  margin: 0;
+  cursor: pointer;
+  position: relative;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+.slow-play-toggle input:checked {
+  background: #F5C518;
+  border-color: #1A4731;
+}
+.slow-play-toggle input:checked::after {
+  content: '✓';
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 900;
+  color: #1A4731;
+}
+@keyframes start-card-pulse {
+  0%, 100% { transform: scale(1);    box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55); }
+  50%      { transform: scale(1.03); box-shadow: 0 30px 90px rgba(245, 197, 24, 0.45); }
+}
+
+/* S1: round-count picker — five small pills inside the start card. Each
+   button picks a round count, dismisses the overlay, and starts the game. */
+.round-picker {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 4px;
+}
+.round-btn {
+  background: #F5C518;
+  color: #1A4731;
+  font-weight: 800;
+  font-size: 1.05rem;
+  font-family: inherit;
+  border: 2px solid #1A4731;
+  border-radius: 10px;
+  padding: 10px 16px;
+  min-width: 48px;
+  cursor: pointer;
+  transition: transform 0.12s ease, background 0.12s ease, box-shadow 0.12s ease;
+}
+.round-btn:hover {
+  background: #FFD740;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+.round-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
