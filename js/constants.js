@@ -48,15 +48,28 @@ function pickNames(n) {
   return picked;
 }
 
-/* Build player config — called fresh each game so names rotate.
-   Seat order (clockwise): 0=You/bottom, 1=Medium/left, 2=Hard/top, 3=Easy/right */
+/* Build player config — called fresh each game so names AND difficulty
+   placement rotate. Seats are fixed (0=You/bottom, 1=left, 2=top, 3=right)
+   but which AI difficulty lands in which seat is shuffled per game, so
+   the easy AI isn't always to the right of the human.
+
+   Important: this function is called once at module-load time (the
+   `let PLAYER_CFG = buildPlayerCfg()` line at the bottom of this file),
+   which runs BEFORE deck.js loads. So the shuffle has to be inlined here
+   — we can't depend on the global `shuffle` function from deck.js yet. */
 function buildPlayerCfg() {
-  const [med, hard, easy] = pickNames(3);
+  const names = pickNames(3);
+  const difficulties = ['easy', 'medium', 'hard'];
+  // Fisher-Yates shuffle, inlined.
+  for (let i = difficulties.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [difficulties[i], difficulties[j]] = [difficulties[j], difficulties[i]];
+  }
   return [
-    { name: 'You',  isHuman: true,  difficulty: null,     zoneId: 'zone-0' },
-    { name: med,    isHuman: false, difficulty: 'medium', zoneId: 'zone-1' },
-    { name: hard,   isHuman: false, difficulty: 'hard',   zoneId: 'zone-2' },
-    { name: easy,   isHuman: false, difficulty: 'easy',   zoneId: 'zone-3' },
+    { name: 'You',    isHuman: true,  difficulty: null,            zoneId: 'zone-0' },
+    { name: names[0], isHuman: false, difficulty: difficulties[0], zoneId: 'zone-1' },
+    { name: names[1], isHuman: false, difficulty: difficulties[1], zoneId: 'zone-2' },
+    { name: names[2], isHuman: false, difficulty: difficulties[2], zoneId: 'zone-3' },
   ];
 }
 

@@ -19,6 +19,8 @@ function dealRound() {
   }
 
   const deck = shuffle(buildDeck());
+  // P4: shuffle sound effect (three soft hisses)
+  soundShuffle();
 
   state.players.forEach(p => {
     p.hand         = [];
@@ -33,9 +35,10 @@ function dealRound() {
     p.lapClosedAt  = 0;
   });
 
-  // Đền state resets — most-recent Ăn Chốt event + any pending T3 marker
+  // Đền state resets — most-recent Ăn Chốt event + any pending T3/T2 markers
   state.denLiable        = null;
   state.pendingTrigger3  = null;
+  state.pendingT2        = null;
   state.lapCloseCounter  = 0;
 
   // Dealer = winner of previous round; P0 for round 1.
@@ -62,12 +65,16 @@ function dealRound() {
   const dealerLabel = dealerIdx === 0
     ? 'You are the dealer — pick a card to discard.'
     : PLAYER_CFG[dealerIdx].name + ' is the dealer — they discard first.';
-  setStatus('Round ' + state.roundNumber + ' · ' + dealerLabel);
+  setStatus('Round ' + state.roundNumber + ' · Dealing…');
 
-  // Ù Khan check now happens per-player at the start of THEIR first turn
-  // (in startTurn) — that gives the human a chance to choose to declare or
-  // skip, and lets each player's check run on their own untouched dealt hand.
-  setTimeout(() => startTurn(), 400);
+  /* P1 deal animation — fly each card from the draw stack to its resting
+     slot. Defer startTurn until the last card has landed; otherwise the
+     first turn could begin mid-deal and feel chaotic. Ù Khan check still
+     happens per-player at the start of THEIR first turn (in startTurn). */
+  animateDeal(dealerIdx).then(() => {
+    setStatus('Round ' + state.roundNumber + ' · ' + dealerLabel);
+    setTimeout(() => startTurn(), 400);
+  });
 }
 
 // ── Start ─────────────────────────────────────────────────────────

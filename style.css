@@ -29,6 +29,30 @@ body {
   text-transform: uppercase;
 }
 
+/* P4: mute toggle button — small circular icon in the header bar.
+   First click also unlocks the audio context (browser autoplay rule). */
+.mute-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid rgba(245, 197, 24, 0.35);
+  background: rgba(255, 255, 255, 0.08);
+  color: #F5F0E4;
+  font-size: 1rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.12s ease, transform 0.1s ease, border-color 0.12s ease;
+  flex-shrink: 0;
+}
+.mute-btn:hover {
+  background: rgba(245, 197, 24, 0.18);
+  border-color: rgba(245, 197, 24, 0.6);
+  transform: translateY(-1px);
+}
+.mute-btn:active { transform: translateY(0); }
+
 /* ── Scoreboard ──────────────────────────────────────────── */
 #scoreboard { display: flex; gap: 3px; }
 .score-cell {
@@ -256,6 +280,18 @@ body {
 /* Dragging ghost: semi-transparent */
 .card.dragging { opacity: 0.45; }
 
+/* P7: cards that are part of a detected (3+ card) phỏm during the discard
+   phase get a soft green outline + outer glow. The color (#4ADE80) matches
+   the phỏm-section accent so the visual language is consistent. Helps the
+   player avoid accidentally discarding cards that are already "safe" in a
+   completed phỏm. Hover styles (peach outline) take over on hover via
+   higher specificity, so the green is the resting hint. */
+.card.in-phom {
+  outline: 2px solid rgba(74, 222, 128, 0.75);
+  outline-offset: 2px;
+  box-shadow: 0 0 16px rgba(74, 222, 128, 0.50), 0 3px 12px rgba(0, 0, 0, 0.16);
+}
+
 /* Face-down card — yellow & white stripe (human / default) */
 .card.face-down {
   background: repeating-linear-gradient(
@@ -359,12 +395,24 @@ body {
 .dp-display .card {
   position: absolute;
   top: 0;
+  /* Smooth fan-out / collapse-back when hovering the pile */
+  transition: left 0.2s ease, transform 0.2s ease;
 }
 /* Fan effect — each card slightly offset and rotated */
 .dp-display .card:nth-child(1) { left: 0px;  transform: rotate(-4deg); }
 .dp-display .card:nth-child(2) { left: 10px; transform: rotate(-1.5deg); }
 .dp-display .card:nth-child(3) { left: 20px; transform: rotate(1deg); }
 .dp-display .card:nth-child(4) { left: 30px; transform: rotate(2.5deg); }
+
+/* Hover: fan the cards out horizontally so each is fully readable. Cards
+   straighten (no rotation) and float above neighbors via raised z-index.
+   The container's flex footprint doesn't change because the cards are
+   position:absolute and just overflow visually. */
+.dp-display:hover                  { z-index: 50; }
+.dp-display:hover .card            { transform: rotate(0deg); }
+.dp-display:hover .card:nth-child(2) { left: 60px;  }
+.dp-display:hover .card:nth-child(3) { left: 120px; }
+.dp-display:hover .card:nth-child(4) { left: 180px; }
 
 .dp-empty {
   width: 52px;
@@ -421,11 +469,30 @@ body {
   height: 90px;  /* xs card height + rotation overhang */
   flex-shrink: 0;
 }
-.phom-group .card { position: absolute; top: 0; }
+.phom-group .card {
+  position: absolute;
+  top: 0;
+  /* Smooth fan-out / collapse-back when hovering the phỏm group */
+  transition: left 0.2s ease, transform 0.2s ease;
+}
 .phom-group .card:nth-child(1) { left: 0px;  transform: rotate(-5deg); }
 .phom-group .card:nth-child(2) { left: 10px; transform: rotate(-1.5deg); }
 .phom-group .card:nth-child(3) { left: 20px; transform: rotate(2deg); }
 .phom-group .card:nth-child(4) { left: 30px; transform: rotate(5deg); }
+
+/* Hover: fan the phỏm cards out horizontally, straighten rotation, and
+   float above neighbors. nth-child rules cover up to 8 cards — enough
+   for any normal sám cô (4) or thông extended via gửi up to 8. Beyond
+   that they overlap slightly but stay readable. */
+.phom-group:hover                  { z-index: 50; }
+.phom-group:hover .card            { transform: rotate(0deg); }
+.phom-group:hover .card:nth-child(2) { left: 60px;  }
+.phom-group:hover .card:nth-child(3) { left: 120px; }
+.phom-group:hover .card:nth-child(4) { left: 180px; }
+.phom-group:hover .card:nth-child(5) { left: 240px; }
+.phom-group:hover .card:nth-child(6) { left: 300px; }
+.phom-group:hover .card:nth-child(7) { left: 360px; }
+.phom-group:hover .card:nth-child(8) { left: 420px; }
 
 /* ── Center area — draw pile flanked by side-player phoms ── */
 #center {
@@ -938,4 +1005,24 @@ body {
   /* Reuses .btn base styling; this just ensures it stretches a bit wider. */
   padding: 8px 28px;
   font-size: 0.82rem;
+}
+
+/* ── Flying card animations (P1 deal / P2 discard / P3 steal) ─────
+   The flyer is a card overlay positioned: fixed and animated via
+   left/top + transform: scale. pointer-events: none so it doesn't
+   intercept any clicks/drags mid-flight. will-change hints the browser
+   to layer-promote for smoother motion. */
+.flying-card {
+  pointer-events: none;
+  will-change: left, top, transform;
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.35), 0 6px 14px rgba(0, 0, 0, 0.18);
+}
+
+/* P5 — steal reveal: while the stolen card pauses at center-screen,
+   give it a warm gold glow so the player's eye snaps to it. The same
+   element keeps this class through stage 1 (source → center) and the
+   pause; stage 2 (center → dest) still uses the class but the visual
+   impact diminishes as the card shrinks toward the destination. */
+.flying-card.flying-reveal {
+  box-shadow: 0 0 36px rgba(245, 197, 24, 0.62), 0 18px 42px rgba(0, 0, 0, 0.35);
 }

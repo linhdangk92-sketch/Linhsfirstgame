@@ -182,6 +182,14 @@ function performSteal(playerIdx) {
   const card    = state.lastDiscard;
   const prevIdx = (playerIdx - 1 + 4) % 4;
 
+  // P3 animation — capture the source rect (the stolen card in the source
+  // pile) BEFORE the state change removes it. The dest rect is captured
+  // after renderAll() further down.
+  const sourcePileEl  = document.getElementById('dp-' + prevIdx);
+  const sourceCardEl  = sourcePileEl && sourcePileEl.lastElementChild;
+  const stealSourceRect = sourceCardEl && sourceCardEl.classList.contains('card')
+    ? sourceCardEl.getBoundingClientRect() : null;
+
   // Ăn Chốt detection: snapshot the victim's discardCount BEFORE we decrement it.
   // If they were already at 4 (the lap-close threshold), the card we're about to
   // steal IS their "final" (4th) discard — stealing it triggers Ăn Chốt for us
@@ -244,30 +252,61 @@ function performSteal(playerIdx) {
   // counter ONLY when this stealer IS the victim's immediate-next-player
   // (which is the current code's only-stealable-by-next-player flow today, but
   // future code might allow further-down-the-rotation steals so the guard is
-  // important). When it hits 3, T2 fires and the round ends instantly.
+  // important). When it hits 3, T2 is MARKED PENDING — we let the stealer
+  // complete their normal post-steal turn (lay-down stolen phỏm + discard
+  // their last rác) before firing T2. performDiscard picks up the pending
+  // marker and triggers declareTriggerTwo after the discard lands. This way
+  // the player-facing sequence is: triple steal → lay-down → discard → Ù
+  // reveal → Đền reveal.
   if (playerIdx === (prevIdx + 1) % 4) {
     state.players[prevIdx].stolenStreak++;
     if (state.players[prevIdx].stolenStreak >= 3) {
-      const stealerName = PLAYER_CFG[playerIdx].name;
-      const victimName  = PLAYER_CFG[prevIdx].name;
-      setStatus(stealerName + ' steals ' + card.rank + card.suit +
-                ' — ⚡ Đền T2! 3 from ' + victimName + ' — round ends!');
-      state.phase = 'playing';
-      renderAll();
-      setTimeout(() => declareTriggerTwo(playerIdx, prevIdx), 700);
-      return;
+      state.pendingT2 = { stealerIdx: playerIdx, victimIdx: prevIdx };
     }
   }
 
   const anChotTag = victimWasAtFinal ? '  ⚡ Ăn Chốt!' : '';
-  setStatus(PLAYER_CFG[playerIdx].name + ' steals ' + card.rank + card.suit + '!' + anChotTag);
+  const tripleTag = state.pendingT2 && state.pendingT2.stealerIdx === playerIdx
+                  ? '  ⚡ Triple Steal — Đền T2 pending!' : '';
+  setStatus(PLAYER_CFG[playerIdx].name + ' steals ' + card.rank + card.suit + '!' +
+            anChotTag + tripleTag);
   state.phase = 'playing';
   renderAll();
 
-  if (checkAndHandleU(playerIdx)) return; // Ù — round ends, no discard needed
+  // P4: rising-sweep "swipe" sound for the steal
+  soundSteal();
+
+  // P3 + P5 steal animation with face-up reveal. The stolen card flies
+  // from the source pile up to center-screen (scaling to full size),
+  // pauses ~600ms so the human can clearly see what was stolen, then
+  // continues to the stealer's hand position. Destination card is hidden
+  // during the entire flight and revealed on landing — for AI hands that
+  // produces a visible "flip" from face-up reveal to face-down hand card.
+  if (stealSourceRect) {
+    const handEl  = document.getElementById('hand-' + playerIdx);
+    const cardEls = handEl ? handEl.querySelectorAll('.card') : [];
+    const destCardEl = cardEls[cardEls.length - 1];
+    if (destCardEl) {
+      const destRect = destCardEl.getBoundingClientRect();
+      destCardEl.style.opacity = '0';
+      animateStealReveal(card, stealSourceRect, destRect)
+        .then(() => { destCardEl.style.opacity = ''; });
+    }
+  }
+
+  // Natural-Ù check happens here only if T2 isn't pending. If T2 is pending,
+  // it takes precedence — the round will end via declareTriggerTwo after the
+  // stealer's normal post-steal discard.
+  if (!state.pendingT2 || state.pendingT2.stealerIdx !== playerIdx) {
+    if (checkAndHandleU(playerIdx)) return; // Ù — round ends, no discard needed
+  }
 
   // B2: mandatory lay-down of the phỏm completed by the stolen card.
-  // Small delay so the "steals X" status message has time to register.
+  // Wait long enough for the P3+P5 reveal animation to play out (~1330ms
+  // total: 350ms source→center + 600ms pause + 380ms center→dest) so the
+  // lay-down UI doesn't appear over the steal reveal. When no animation
+  // ran (no source rect captured), use the original short pause instead.
+  const layDownDelay = stealSourceRect ? 1400 : 500;
   setTimeout(() => {
     layDownStolenPhom(playerIdx, card, () => {
       if (PLAYER_CFG[playerIdx].isHuman) {
@@ -276,7 +315,7 @@ function performSteal(playerIdx) {
         setTimeout(() => aiDiscard(playerIdx), 600);
       }
     });
-  }, 500);
+  }, layDownDelay);
 }
 
 /* The current player draws the top card from the draw pile */
@@ -319,7 +358,7 @@ function showDiscardUI() {
     setStatus('Drag a card to the center to discard it.', timeLeft + 's');
     if (timeLeft <= 0) {
       clearInterval(timers.discard); timers.discard = null;
-      performDiscard(0, aiBestDiscard(state.players[0].hand, 'easy'));
+      performDiscard(0, aiBestDiscard(state.players[0].hand, 'easy', 0));
     }
   }, 1000);
 }
@@ -330,6 +369,10 @@ function performDiscard(playerIdx, card) {
   clearAllTimers();
   renderActionBar([]);
   state.phase = 'playing';
+
+  // P2 animation — capture the source rect (card in hand) BEFORE the state
+  // change removes it. The dest rect is captured after renderAll() below.
+  const sourceRect = getCardRectInHand(playerIdx, card);
 
   const player = state.players[playerIdx];
 
@@ -347,6 +390,38 @@ function performDiscard(playerIdx, card) {
 
   setStatus(PLAYER_CFG[playerIdx].name + ' discards ' + card.rank + card.suit + '.');
   renderAll();
+
+  // P4: two-tone "drop" sound for the discard
+  soundDiscard();
+
+  // P2 animation — fly the card from the hand position to its new spot in
+  // the discard pile. The destination card was just added to dp-N as the
+  // last child; hide it during flight then reveal on completion.
+  if (sourceRect) {
+    const destPileEl = document.getElementById('dp-' + playerIdx);
+    const destCardEl = destPileEl && destPileEl.lastElementChild;
+    if (destCardEl && destCardEl.classList.contains('card')) {
+      const destRect = destCardEl.getBoundingClientRect();
+      destCardEl.style.opacity = '0';
+      animateCardFly(card, sourceRect, destRect, {
+        cardOpts: { xs: true },
+        duration: 320,
+      }).then(() => { destCardEl.style.opacity = ''; });
+    }
+  }
+
+  // T2 takes priority over natural Ù — if the 3-streak condition was triggered
+  // earlier in this stealer's turn, fire T2 now (after they've completed the
+  // normal steal → lay-down → discard sequence). The "considered Ù" + Đền
+  // reveal happens inside declareTriggerTwo. T3 marker is also cleared
+  // since T2 supersedes any pending T3.
+  if (state.pendingT2 && state.pendingT2.stealerIdx === playerIdx) {
+    const { stealerIdx, victimIdx } = state.pendingT2;
+    state.pendingT2       = null;
+    state.pendingTrigger3 = null;
+    setTimeout(() => declareTriggerTwo(stealerIdx, victimIdx), 700);
+    return;
+  }
 
   // B7: if this discard was the last rác, the remaining hand is pure phỏm — Ù.
   if (checkAndHandleU(playerIdx)) return;
@@ -388,38 +463,83 @@ function runAiTurn() {
 
 /* After AI draws/steals, pick the best card to discard */
 function aiDiscard(playerIdx) {
-  const card = aiBestDiscard(state.players[playerIdx].hand, PLAYER_CFG[playerIdx].difficulty);
+  const card = aiBestDiscard(state.players[playerIdx].hand, PLAYER_CFG[playerIdx].difficulty, playerIdx);
   performDiscard(playerIdx, card);
 }
 
-/* Heuristic: discard the highest-value card that is NOT part of a pair
-   or a 2-card near-sequence (same suit, adjacent rank).
-   Full strategic AI comes in Phase 6. */
-function aiBestDiscard(hand, difficulty) {
-  const useful = new Set();
+/* Pick a card to discard, scored the same way for all difficulties; the only
+   level-specific behaviors are (1) whether opponent-feed avoidance is
+   considered, and (2) the probability of picking the top-scored card vs.
+   making a "mistake" (a random non-optimal pick).
 
+   Scoring components per card in hand:
+
+   ownUseful — card pairs up with another hand card by any of these patterns
+     (recognized by ALL difficulties):
+       • same rank (potential sám cô)
+       • same suit, adjacent rank (potential thông)
+       • same suit, 2-rank gap (potential thông via the missing middle card)
+     ALSO: card could extend the AI's OWN laid-down phỏm via gửi at end of
+     round. Same idea — it's a card worth keeping.
+
+   oppFeed — card could extend ANY opponent's laid-down phỏm via gửi
+     (Medium + Hard only — Easy skips this and plays purely self-focused).
+
+   keepScore = 2*(ownUseful?1:0) + 1*(oppFeed?1:0). Higher = keep, lower =
+   safer to discard. Tiebreak: higher value goes first (dump high-rác cards
+   ahead of low-rác).
+
+   Mistake model — probability of picking the top-scored card:
+     hard   : 90% optimal, 10% random non-optimal
+     medium : 75% optimal, 25% random non-optimal
+     easy   : 40% optimal, 60% random non-optimal (own-only scoring) */
+function aiBestDiscard(hand, difficulty, playerIdx) {
+  // ─── Step 1: ownUseful set ───────────────────────────────────────
+  const ownUseful = new Set();
   for (let i = 0; i < hand.length; i++) {
     for (let j = i + 1; j < hand.length; j++) {
-      const a = hand[i], b = hand[j];
-      // Same rank → potential sám cô
-      if (a.rank === b.rank) { useful.add(i); useful.add(j); }
-      // Adjacent rank, same suit → potential thông
-      if (a.suit === b.suit && Math.abs(RANK_ORDER[a.rank] - RANK_ORDER[b.rank]) === 1) {
-        useful.add(i); useful.add(j);
-      }
+      const a   = hand[i], b = hand[j];
+      const dRk = Math.abs(RANK_ORDER[a.rank] - RANK_ORDER[b.rank]);
+      if (a.rank === b.rank)                            { ownUseful.add(i); ownUseful.add(j); }
+      if (a.suit === b.suit && (dRk === 1 || dRk === 2)) { ownUseful.add(i); ownUseful.add(j); }
     }
   }
+  // Own laid-down extensions — could be gửi'd at end of round.
+  if (playerIdx !== undefined && state.players[playerIdx]) {
+    state.players[playerIdx].laidDown.forEach(group => {
+      hand.forEach((card, i) => { if (canGui(card, group)) ownUseful.add(i); });
+    });
+  }
 
-  // Discard the highest-value non-useful card
-  const racs = hand
-    .map((card, i) => ({ card, i, val: RANK_VALUE[card.rank] }))
-    .filter(({ i }) => !useful.has(i))
-    .sort((a, b) => b.val - a.val);
+  // ─── Step 2: oppFeed set (skipped for Easy) ──────────────────────
+  const oppFeed = new Set();
+  if (difficulty !== 'easy' && playerIdx !== undefined) {
+    state.players.forEach((p, pIdx) => {
+      if (pIdx === playerIdx) return; // skip self — that's ownUseful's job
+      p.laidDown.forEach(group => {
+        hand.forEach((card, i) => { if (canGui(card, group)) oppFeed.add(i); });
+      });
+    });
+  }
 
-  if (racs.length > 0) return racs[0].card;
+  // ─── Step 3: score + sort ─────────────────────────────────────────
+  const scored = hand.map((card, i) => ({
+    card, i,
+    value:     RANK_VALUE[card.rank],
+    keepScore: (ownUseful.has(i) ? 2 : 0) + (oppFeed.has(i) ? 1 : 0),
+  }));
+  scored.sort((a, b) => {
+    if (a.keepScore !== b.keepScore) return a.keepScore - b.keepScore; // safer first
+    return b.value - a.value;                                          // dump high-rác first
+  });
 
-  // Fallback: all cards are in pairs/sequences — discard highest value overall
-  return hand.slice().sort((a, b) => RANK_VALUE[b.rank] - RANK_VALUE[a.rank])[0];
+  // ─── Step 4: probabilistic pick ──────────────────────────────────
+  const pOptimal = { hard: 0.9, medium: 0.75, easy: 0.4 }[difficulty] || 0.9;
+  if (scored.length === 1 || Math.random() < pOptimal) {
+    return scored[0].card; // optimal pick
+  }
+  const rest = scored.slice(1);
+  return rest[Math.floor(Math.random() * rest.length)].card; // random non-optimal mistake
 }
 
 // ── Extra Turns (B5) ──────────────────────────────────────────────
@@ -460,7 +580,7 @@ function runAiExtraTurn() {
       return;
     }
     if (player.hand.length > 0) {
-      const card = aiBestDiscard(player.hand, cfg.difficulty);
+      const card = aiBestDiscard(player.hand, cfg.difficulty, playerIdx);
       performDiscard(playerIdx, card);
       return;
     }

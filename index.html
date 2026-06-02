@@ -13,6 +13,9 @@
   <h1>Phỏm · Tá Lả</h1>
   <div id="scoreboard"></div>
   <div class="round-badge" id="round-badge">Round 1 of 4</div>
+  <!-- P4: mute toggle. Clicking also satisfies the autoplay-gesture
+       requirement so audio unlocks immediately. -->
+  <button id="mute-btn" class="mute-btn" type="button" title="Sound on — click to mute">🔊</button>
 </div>
 
 <!-- ── Game table ─────────────────────────────────────────────── -->
@@ -144,6 +147,7 @@
 <!-- Scripts load in dependency order: each file can only use globals from files above it -->
 <script src="js/constants.js"></script>
 <script src="js/state.js"></script>
+<script src="js/audio.js"></script>
 <script src="js/deck.js"></script>
 <script src="js/phom.js"></script>
 <script src="js/render.js"></script>

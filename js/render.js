@@ -105,6 +105,17 @@ function renderHumanHand(isDiscardPhase) {
 
   const hand = state.players[0].hand;
 
+  /* P7: during discard phase, identify the cards that are part of the
+     optimal phỏm partition so they can be visually highlighted (green
+     glow). Helps the player avoid discarding cards that are already
+     "safe" in a complete 3+ card phỏm. Uses Set of card refs for O(1)
+     lookup in the render loop below. */
+  const phomCardSet = new Set();
+  if (isDiscardPhase) {
+    const { groups } = findBestPhoms(hand);
+    groups.forEach(group => group.forEach(c => phomCardSet.add(c)));
+  }
+
   /* Hide the sort toolbar when the hand has fewer than 6 cards — at that
      size sorting isn't useful (you can scan them at a glance) and the empty
      buttons just add visual noise. Re-evaluated on every render so the
@@ -252,6 +263,10 @@ function renderHumanHand(isDiscardPhase) {
     handEl.appendChild(makeGap(idx));
 
     const el = makeCard(card, { selectable: isDiscardPhase });
+    /* P7: tag cards that are part of a detected phỏm so the CSS rule
+       can apply the green glow. Only set during discard phase since
+       phomCardSet is empty otherwise. */
+    if (phomCardSet.has(card)) el.classList.add('in-phom');
     el.draggable = true;
     let _wasDragged = false;
 
@@ -414,6 +429,218 @@ function renderAll() {
 function setStatus(msg, right = '') {
   document.getElementById('status-msg').textContent   = msg;
   document.getElementById('status-right').textContent = right;
+}
+
+/* ── Card-fly animation helpers ──────────────────────────────────
+   Shared foundation for P1 (deal), P2 (discard), P3 (steal). The pattern:
+   1. Capture the source rect (where the card visually IS now).
+   2. Update state + renderAll() — DOM now reflects the destination.
+   3. Capture the dest rect, hide the destination card (opacity: 0).
+   4. Spawn a "flying" overlay card positioned at source, animate to dest.
+   5. On animation complete, reveal the destination card.
+   The flyer uses position:fixed (viewport-relative coords from
+   getBoundingClientRect) and transform:scale to smoothly resize between
+   source and dest sizes. transform-origin:0 0 anchors scaling to the
+   top-left so `left`/`top` represent the actual on-screen position. */
+
+/* Get the bounding rect of a specific card in a player's hand. For the
+   human (face-up), match by index in state.players[0].hand. For AI hands
+   (face-down, identical-looking cards), any visible card works visually. */
+function getCardRectInHand(playerIdx, card) {
+  const handEl = document.getElementById('hand-' + playerIdx);
+  if (!handEl) return null;
+  const cardEls = handEl.querySelectorAll('.card');
+  if (cardEls.length === 0) return null;
+  if (playerIdx === 0) {
+    const cardIdx = state.players[0].hand.indexOf(card);
+    if (cardIdx >= 0 && cardIdx < cardEls.length) {
+      return cardEls[cardIdx].getBoundingClientRect();
+    }
+    return null;
+  }
+  // AI: any face-down card position represents the same visual location
+  return cardEls[cardEls.length - 1].getBoundingClientRect();
+}
+
+/* P1 deal animation — fly each just-dealt card from the draw-pile center to
+   its resting slot in the destination player's hand. Cards deal in round-
+   robin order starting from the dealer: dealer gets card 1, next player
+   card 1, … around the table, then back to dealer for card 2, etc. The
+   dealer ends with one extra card (10 vs. 9) so they get a final extra
+   turn at the end of the sequence.
+   Returns a Promise that resolves once the last card has landed so the
+   caller can chain a "now start the first turn" follow-up. */
+function animateDeal(dealerIdx) {
+  return new Promise(resolve => {
+    // Source: one of the visible cards in the draw stack — pick the top
+    // card so the flyer appears to lift off from a real position.
+    const sourceEl = document.querySelector('#draw-stack .card');
+    if (!sourceEl) { resolve(); return; }
+    const sourceRect = sourceEl.getBoundingClientRect();
+
+    // Snapshot each player's hand card elements + hide them immediately.
+    // We reveal each card individually as its flyer lands so the deal
+    // visibly proceeds one card at a time.
+    const cardEls = [0, 1, 2, 3].map(idx => {
+      const handEl = document.getElementById('hand-' + idx);
+      if (!handEl) return [];
+      const els = Array.from(handEl.querySelectorAll('.card'));
+      els.forEach(el => { el.style.opacity = '0'; });
+      return els;
+    });
+
+    const stagger  = 50;  // ms between consecutive deal events
+    const duration = 280; // ms per individual card flight
+    let dealCount  = 0;
+
+    for (let cardIdx = 0; cardIdx < 10; cardIdx++) {
+      for (let offset = 0; offset < 4; offset++) {
+        const playerIdx   = (dealerIdx + offset) % 4;
+        const targetCount = playerIdx === dealerIdx ? 10 : 9;
+        if (cardIdx >= targetCount) continue;
+
+        const destCardEl = cardEls[playerIdx][cardIdx];
+        if (!destCardEl) continue;
+
+        const card  = state.players[playerIdx].hand[cardIdx];
+        const delay = dealCount * stagger;
+        const cardOpts = playerIdx === 0
+          ? {}                                              // human: normal, face-up
+          : { sm: true, faceDown: true, playerIdx };        // AI: small, face-down (colored back)
+
+        setTimeout(() => {
+          const destRect = destCardEl.getBoundingClientRect();
+          // P4: soft deal-tick per card so the rapid deal sounds like
+          // rapid taps (matches the visual stagger naturally).
+          soundDeal();
+          animateCardFly(card, sourceRect, destRect, { cardOpts, duration })
+            .then(() => { destCardEl.style.opacity = ''; });
+        }, delay);
+
+        dealCount++;
+      }
+    }
+
+    setTimeout(resolve, dealCount * stagger + duration + 50);
+  });
+}
+
+/* P5 + P3 combined — steal animation with a brief face-up reveal. The
+   stolen card lifts off the source pile, scales up to normal size at
+   center-screen, pauses ~600ms so the human can clearly read it, then
+   flies to the stealer's hand position. The flyer is ALWAYS face-up
+   throughout the flight so the player gets to see what was stolen —
+   even when the destination is an AI hand (face-down). The destination
+   card "flips" to its proper state on landing when its opacity is
+   restored by the caller.
+   Returns a Promise that resolves when the full sequence completes. */
+function animateStealReveal(card, sourceRect, destRect) {
+  const stage1Duration = 350; // source → center
+  const pauseDuration  = 600; // pause at center
+  const stage2Duration = 380; // center → dest
+
+  return new Promise(resolve => {
+    const centerW = 96, centerH = 139; // normal-card size
+    const centerRect = {
+      left:   window.innerWidth  / 2 - centerW / 2,
+      top:    window.innerHeight / 2 - centerH / 2,
+      width:  centerW,
+      height: centerH,
+    };
+
+    const flyer = makeCard(card, {});
+    flyer.classList.add('flying-card', 'flying-reveal');
+    flyer.style.position        = 'fixed';
+    flyer.style.left            = sourceRect.left + 'px';
+    flyer.style.top             = sourceRect.top  + 'px';
+    flyer.style.transformOrigin = '0 0';
+    flyer.style.zIndex          = '1100';
+    flyer.style.pointerEvents   = 'none';
+    flyer.style.margin          = '0';
+
+    document.body.appendChild(flyer);
+
+    const naturalW = flyer.offsetWidth  || centerW;
+    const naturalH = flyer.offsetHeight || centerH;
+
+    // Start at source size
+    flyer.style.transform = 'scale(' + (sourceRect.width / naturalW) + ', ' +
+                                       (sourceRect.height / naturalH) + ')';
+    void flyer.offsetWidth;
+
+    // Stage 1: source → center (scale to 1.0)
+    flyer.style.transition = 'left ' + stage1Duration + 'ms cubic-bezier(0.4, 0.1, 0.6, 1), ' +
+                             'top '  + stage1Duration + 'ms cubic-bezier(0.4, 0.1, 0.6, 1), ' +
+                             'transform ' + stage1Duration + 'ms cubic-bezier(0.4, 0.1, 0.6, 1)';
+    flyer.style.left      = centerRect.left + 'px';
+    flyer.style.top       = centerRect.top  + 'px';
+    flyer.style.transform = 'scale(1, 1)';
+
+    // After stage 1 + pause: stage 2 (center → dest)
+    setTimeout(() => {
+      flyer.style.transition = 'left ' + stage2Duration + 'ms cubic-bezier(0.4, 0.1, 0.6, 1), ' +
+                               'top '  + stage2Duration + 'ms cubic-bezier(0.4, 0.1, 0.6, 1), ' +
+                               'transform ' + stage2Duration + 'ms cubic-bezier(0.4, 0.1, 0.6, 1)';
+      flyer.style.left      = destRect.left + 'px';
+      flyer.style.top       = destRect.top  + 'px';
+      flyer.style.transform = 'scale(' + (destRect.width / naturalW) + ', ' +
+                                         (destRect.height / naturalH) + ')';
+
+      setTimeout(() => {
+        flyer.remove();
+        resolve();
+      }, stage2Duration + 30);
+    }, stage1Duration + pauseDuration);
+  });
+}
+
+/* Animate a flying card overlay from sourceRect to destRect. cardOpts is
+   passed straight to makeCard (so the flyer matches the dest card's look:
+   normal/sm/xs, face-up/down). Returns a Promise that resolves when the
+   animation completes so callers can chain "reveal the dest card" cleanup. */
+function animateCardFly(card, sourceRect, destRect, options = {}) {
+  const duration = options.duration || 350;
+  const cardOpts = options.cardOpts || {};
+
+  return new Promise(resolve => {
+    const flyer = makeCard(card, cardOpts);
+    flyer.classList.add('flying-card');
+    flyer.style.position       = 'fixed';
+    flyer.style.left           = sourceRect.left + 'px';
+    flyer.style.top            = sourceRect.top  + 'px';
+    flyer.style.transformOrigin = '0 0';
+    flyer.style.zIndex         = '1100';
+    flyer.style.pointerEvents  = 'none';
+    flyer.style.margin         = '0'; // override any hand margin-left etc.
+
+    document.body.appendChild(flyer);
+
+    // The flyer's natural size is determined by cardOpts (and matches the
+    // destination). Compute the scale that makes it appear at source size
+    // initially, and 1.0 at the destination.
+    const naturalW = flyer.offsetWidth  || destRect.width;
+    const naturalH = flyer.offsetHeight || destRect.height;
+    const startSX  = sourceRect.width  / naturalW;
+    const startSY  = sourceRect.height / naturalH;
+    flyer.style.transform = 'scale(' + startSX + ', ' + startSY + ')';
+
+    /* Force reflow so the initial position/transform are committed before
+       we add the transition + final state — otherwise the browser batches
+       both and skips the animation. */
+    void flyer.offsetWidth;
+
+    flyer.style.transition = 'left ' + duration + 'ms cubic-bezier(0.4, 0.1, 0.6, 1), ' +
+                             'top '  + duration + 'ms cubic-bezier(0.4, 0.1, 0.6, 1), ' +
+                             'transform ' + duration + 'ms cubic-bezier(0.4, 0.1, 0.6, 1)';
+    flyer.style.left      = destRect.left + 'px';
+    flyer.style.top       = destRect.top  + 'px';
+    flyer.style.transform = 'scale(1, 1)';
+
+    setTimeout(() => {
+      flyer.remove();
+      resolve();
+    }, duration + 30);
+  });
 }
 
 /* Internal: append a toast pill to a player's .player-info bar, fade it in,

@@ -20,6 +20,7 @@ const state = {
   // ever liable at a time (chain transfers overwrite the previous one).
   denLiable:        null, // { stealerIdx, victimIdx } of the most recent Ăn Chốt event, or null
   pendingTrigger3:  null, // { winnerIdx, victimIdx } when the stolen card immediately completes the stealer's Ù
+  pendingT2:        null, // { stealerIdx, victimIdx } when 3-streak triggers but the stealer hasn't yet completed their post-steal discard. T2 fires after that discard so the natural turn sequence reads: steal → lay-down → discard → Ù reveal → Đền reveal
 
   // Lap-close ordering — used by endRound to rank Móm players against each
   // other (rác total doesn't matter for Móm; the one who lap-closed FIRST is

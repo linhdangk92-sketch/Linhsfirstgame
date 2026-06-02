@@ -196,6 +196,9 @@ function declareU(playerIdx, isKhan = false) {
   // loss). Zero deltas are silently skipped by the helper.
   state.players.forEach((_, i) => showScoreChangeToast(i, roundScores[i]));
 
+  // P4: ascending 3-note fanfare
+  soundU();
+
   // B8: celebration overlay — distinct visuals for Ù vs Ù Khan.
   showUCelebration(name, isKhan);
 
@@ -230,11 +233,15 @@ function declareU(playerIdx, isKhan = false) {
 }
 
 /* Đền Trigger 2 — the immediate-next-player has cumulatively stolen 3 of the
-   victim's discards. Round ends instantly. The stealer is "considered Ù'd"
-   and scores +15; the victim covers everybody (−15); the other two players
-   end at 0. Flow mirrors declareU: cumScore updated immediately; renderScores
-   deferred to the recap "Add to Scoreboard" click. Uses Ù Khan visuals
-   (gold/pulsing/30-particle) to highlight how rare/punishing T2 is. */
+   victim's discards. Fires AFTER the stealer's normal post-steal flow
+   (lay-down stolen phỏm + discard) so the sequence reads: steal → lay-down
+   → discard → Ù reveal → Đền reveal. cumScore updated immediately;
+   renderScores deferred to the recap "Add to Scoreboard" click.
+
+   Visual sequence:
+     t=0     Ù Khan celebration ("considered Ù via Triple Steal!")  ~4s
+     t=4s    Đền banner + per-player payment toasts                 ~2.5s
+     t=~7s   Recap modal */
 function declareTriggerTwo(stealerIdx, victimIdx) {
   state.phase = 'scoring';
 
@@ -260,16 +267,24 @@ function declareTriggerTwo(stealerIdx, victimIdx) {
 
   setStatus('⚡ Đền T2!  ' + stealerName + ' (considered Ù)');
 
-  // Immediate announcement: center banner + per-player payment toasts.
-  showDenToast(DEN_LABELS.T2,
-    stealerName + ' stole 3 of ' + victimName + "'s discards — counts as Ù");
-  state.players.forEach((_, i) => showScoreChangeToast(i, roundScores[i]));
+  // P4: ascending 3-note fanfare for the T2 "considered Ù"
+  soundU();
 
-  // Khan-style celebration for the rare T2 event
+  // Stage 1 — Ù Khan celebration. Khan-style (gold/pulsing/30-particle).
+  // Đền is NOT mentioned in this celebration text; it gets its own reveal
+  // in stage 2 so the player can absorb each event clearly.
   showUCelebration(stealerName, true,
-    stealerName + ' steals 3 from ' + victimName + ' — Đền T2! 🏆');
+    stealerName + ' is considered Ù via Triple Steal! 🏆');
 
-  // Recap modal fires after the Khan celebration (4s) + 400ms buffer
+  // Stage 2 — after the ~4s Khan celebration fades, fire the Đền banner +
+  // per-player payment toasts. This is the "now you see what they pay" beat.
+  setTimeout(() => {
+    showDenToast(DEN_LABELS.T2,
+      stealerName + ' stole 3 of ' + victimName + "'s discards — counts as Ù");
+    state.players.forEach((_, i) => showScoreChangeToast(i, roundScores[i]));
+  }, 4000);
+
+  // Stage 3 — after the ~2.5s Đền banner fades, show the recap modal.
   setTimeout(() => {
     const breakdown = state.players.map((p, i) => ({
       idx:    i,
@@ -287,7 +302,7 @@ function declareTriggerTwo(stealerIdx, victimIdx) {
         () => { isLastRound ? showGameOver() : (state.roundNumber++, dealRound()); }
       )]);
     });
-  }, 4400);
+  }, 4000 + 2500 + 400);
 }
 
 /* Called when all players have laid down. Ranks players by rác total, applies
