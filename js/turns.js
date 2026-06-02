@@ -20,6 +20,11 @@ function startTurn() {
   clearStealable();
   state.stealHappenedThisTurn = false;
   state.selectedDiscardCard   = null;
+  /* T3 window closes when a new turn begins. If the previous turn's
+     ăn chốt-er didn't Ù during that turn, the T3 marker expires — they're
+     off the T3 hook. (state.denLiable still tracks them for T1 in case
+     someone ELSE Ù's later in the round.) */
+  state.pendingTrigger3       = null;
   renderActionBar([]);
   renderScores();
   renderActiveZone();
@@ -28,6 +33,25 @@ function startTurn() {
   if (state.players[state.currentTurn].hasLaidDown) {
     startExtraTurn();
     return;
+  }
+
+  // Ù Khan declare window — only on each player's untouched first turn.
+  // firstTurn flips to false here so the check never re-fires for the same
+  // player (their hand changes after their first draw/discard anyway, but
+  // this gate is the authoritative way to close the window).
+  const player = state.players[state.currentTurn];
+  if (player.firstTurn) {
+    player.firstTurn = false;
+    if (isUKhan(player.hand)) {
+      if (PLAYER_CFG[state.currentTurn].isHuman) {
+        showHumanUKhanPrompt();
+      } else {
+        // AI auto-declares — no choice involved, the bonus is always worth taking.
+        setStatus(PLAYER_CFG[state.currentTurn].name + ' has Ù Khan! 🏆 Round over!');
+        setTimeout(() => declareU(state.currentTurn, true), 900);
+      }
+      return;
+    }
   }
 
   const cfg = PLAYER_CFG[state.currentTurn];
@@ -52,6 +76,29 @@ function startHumanTurn() {
   const canDoSteal = canSteal(disc, state.players[0].hand);
   highlightStealable(prevIdx);
   showStealDrawUI(canDoSteal, disc);
+}
+
+/* Human's Ù Khan choice. Their dealt hand has zero pairs and zero near-sequences
+   (impossible to make any phỏm) — they can declare to win the round (+15) or
+   skip and play normally. Clicking Skip drops them into the regular turn flow;
+   the firstTurn flag was already flipped in startTurn, so this opportunity
+   never re-appears for them later in the round. */
+function showHumanUKhanPrompt() {
+  state.phase = 'ukhan-prompt';
+  setStatus('Your hand is Ù Khan! Zero phỏm possible — declare for +15, or skip to play normally.');
+
+  const declareBtn = makeBtn('Declare Ù Khan! 🏆', 'btn-laydown', () => {
+    renderActionBar([]);
+    declareU(0, true);
+  });
+
+  const skipBtn = makeBtn('Skip — play normally', 'btn-draw', () => {
+    renderActionBar([]);
+    state.phase = 'playing';
+    startHumanTurn();
+  });
+
+  renderActionBar([declareBtn, skipBtn]);
 }
 
 // ── Steal / Draw ──────────────────────────────────────────────────
@@ -178,14 +225,19 @@ function performSteal(playerIdx) {
   //   stole from. The chain transfer rule is handled by simply overwriting:
   //   if a later steal is also an ăn chốt, the new stealer becomes liable and
   //   the previous one is automatically off the hook.
-  // - state.pendingTrigger3 is set ONLY if this steal IMMEDIATELY completes
-  //   the stealer's Ù — that's the T3 case (you Ù via the stolen card).
-  //   Cleared in declareU after the Ù is processed.
+  // - state.pendingTrigger3 is set UNCONDITIONALLY whenever ăn chốt happens
+  //   and is scoped to the stealer's CURRENT TURN. The marker is cleared in
+  //   startTurn when the next player's turn begins, so the T3 window is
+  //   "this turn only". If the stealer Ù's at any point during this turn —
+  //   the typical flow is steal → lay-down stolen phỏm → discard → Ù — T3
+  //   fires. (Earlier the marker required Ù to fire instantly from the
+  //   10-card hand, which almost never happens in practice since Ù requires
+  //   a discard.)
   if (victimWasAtFinal) {
-    state.denLiable = { stealerIdx: playerIdx, victimIdx: prevIdx };
-    if (checkU(state.players[playerIdx].hand)) {
-      state.pendingTrigger3 = { winnerIdx: playerIdx, victimIdx: prevIdx };
-    }
+    state.denLiable       = { stealerIdx: playerIdx, victimIdx: prevIdx };
+    state.pendingTrigger3 = { winnerIdx: playerIdx, victimIdx: prevIdx };
+    // Visual: small yellow pill next to the stealer's zone for ~1.5s
+    showAnChotToast(playerIdx);
   }
 
   // Step 6: T2 streak — increment the victim's "stolen by immediate-next-player"
@@ -260,11 +312,11 @@ function showDiscardUI() {
   renderHumanHand(true); // cards become clickable; each click calls performDiscard directly
 
   let timeLeft = 60;
-  setStatus('Click a card in your hand to discard it.', timeLeft + 's');
+  setStatus('Drag a card to the center to discard it.', timeLeft + 's');
 
   timers.discard = setInterval(() => {
     timeLeft--;
-    setStatus('Click a card in your hand to discard it.', timeLeft + 's');
+    setStatus('Drag a card to the center to discard it.', timeLeft + 's');
     if (timeLeft <= 0) {
       clearInterval(timers.discard); timers.discard = null;
       performDiscard(0, aiBestDiscard(state.players[0].hand, 'easy'));

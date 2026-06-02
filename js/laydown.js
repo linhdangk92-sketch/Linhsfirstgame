@@ -325,7 +325,13 @@ function handleGuiStep(playerIdx, onDone) {
 /* One player closes their lap individually (no synchronized cascade).
    Triggered from afterDiscard when the discarder's discardCount hits 4.
    Sequence per rules.md: lay down remaining phỏm → reveal hand → gửi → onDone.
-   Phỏm completed by earlier steals are already in `laidDown` from B2. */
+   Phỏm completed by earlier steals are already in `laidDown` from B2.
+
+   For the human player, when there's a phỏm to lay down, we show a
+   confirmation panel listing exactly which cards will land on the table —
+   so a surprise auto-lay-down (e.g. the old greedy picking a thông over a
+   pair of sám cô) can't catch them off guard. AI auto-confirms; a Móm human
+   also auto-advances since there's nothing to review. */
 function runLapClose(playerIdx, onDone) {
   const player = state.players[playerIdx];
   const cfg    = PLAYER_CFG[playerIdx];
@@ -333,21 +339,59 @@ function runLapClose(playerIdx, onDone) {
   // First lap-close in the round flips the global into "last lap" mode.
   state.isLastLap = true;
 
-  // Lay down any remaining valid phỏm. (player.isMom is already false if any
-  // phỏm was laid down via a steal earlier; lockInPhoms keeps it accurate.)
+  // Detect the optimal phỏm partition BEFORE locking it in — so the human
+  // can review and confirm. (player.isMom is already false if any phỏm was
+  // laid down via a steal earlier; lockInPhoms below keeps it accurate.)
   const { groups } = findBestPhoms(player.hand);
-  if (groups.length > 0) lockInPhoms(playerIdx, groups);
 
-  // Reveal the hand. renderHands flips face-down → face-up via player.hasLaidDown.
-  player.hasLaidDown = true;
-  renderAll();
+  /* The actual lock-in + reveal + gửi step, fired once the human confirms
+     (or immediately for AI / Móm-human). */
+  const finalize = () => {
+    if (groups.length > 0) lockInPhoms(playerIdx, groups);
 
-  const summary = groups.length > 0
-    ? groups.map(g => '[' + g.map(c => c.rank + c.suit).join(' ') + ']').join(' ')
-    : (player.laidDown.length === 0 ? '(Móm — no phỏm)' : '(no remaining phỏm)');
-  setStatus(cfg.name + ' lap-closes ' + summary);
+    // Reveal the hand. renderHands flips face-down → face-up via player.hasLaidDown.
+    player.hasLaidDown = true;
+    // Stamp the order of this lap-close so endRound can rank Móm players
+    // ("1st Móm" closed first, "2nd Móm" closed later, etc.).
+    player.lapClosedAt = ++state.lapCloseCounter;
+    renderAll();
 
-  // Gửi opportunity — empty for the first lap-closer when no other phỏm exists yet.
-  setTimeout(() => handleGuiStep(playerIdx, onDone), 800);
+    const summary = groups.length > 0
+      ? groups.map(g => '[' + g.map(c => c.rank + c.suit).join(' ') + ']').join(' ')
+      : (player.laidDown.length === 0 ? '(Móm — no phỏm)' : '(no remaining phỏm)');
+    setStatus(cfg.name + ' lap-closes ' + summary);
+
+    // Móm callout: if they finished the round without laying down a single
+    // phỏm (no organic phỏm now AND no stolen-completed phỏm earlier), pop a
+    // dark-slate toast next to their zone so the penalty moment is visible.
+    if (player.isMom) showMomToast(playerIdx);
+
+    // Gửi opportunity — empty for the first lap-closer when no other phỏm exists yet.
+    setTimeout(() => handleGuiStep(playerIdx, onDone), 800);
+  };
+
+  // Human + has phỏm to lay down → show confirmation in action bar.
+  if (cfg.isHuman && groups.length > 0) {
+    state.phase = 'laydown-prompt';
+
+    const label = document.createElement('span');
+    label.style.cssText = 'font-size:0.72rem; color:#1A4731; font-weight:700; white-space:nowrap;';
+    label.textContent = 'Lap-close phỏm: ' + groups.map(
+      g => '[' + g.map(c => c.rank + c.suit).join(' ') + ']'
+    ).join('  ');
+
+    const btn = makeBtn('Confirm Lay Down', 'btn-laydown', () => {
+      renderActionBar([]);
+      state.phase = 'playing';
+      finalize();
+    });
+
+    setStatus('Lap-close! Review your phỏm and confirm to lay down.');
+    renderActionBar([label, btn]);
+    return;
+  }
+
+  // AI or Móm-human → finalize immediately
+  finalize();
 }
 

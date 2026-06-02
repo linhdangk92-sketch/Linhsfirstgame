@@ -21,6 +21,12 @@ const state = {
   denLiable:        null, // { stealerIdx, victimIdx } of the most recent Ăn Chốt event, or null
   pendingTrigger3:  null, // { winnerIdx, victimIdx } when the stolen card immediately completes the stealer's Ù
 
+  // Lap-close ordering — used by endRound to rank Móm players against each
+  // other (rác total doesn't matter for Móm; the one who lap-closed FIRST is
+  // "1st Móm", next is "2nd Móm", etc.). Per-player lapClosedAt is set when
+  // their runLapClose finalize() runs.
+  lapCloseCounter:  0,
+
   players: Array(4).fill(null).map(() => ({
     hand:         [],
     laidDown:     [],      // array of phom groups (each group = array of cards)
@@ -31,5 +37,7 @@ const state = {
     roundScore:    0,
     isMom:        true,    // no phom laid down yet (Móm penalty applies at round end)
     stolenStreak:  0,      // cumulative steals FROM this player BY their immediate-next-player only — Đền T2 triggers at 3
+    firstTurn:    true,    // false once this player has had startTurn called on them once — used to gate the Ù Khan declare window
+    lapClosedAt:   0,      // monotonically-increasing tag set when this player lap-closes; 0 means hasn't lap-closed yet
   })),
 };

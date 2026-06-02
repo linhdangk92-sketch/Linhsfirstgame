@@ -111,6 +111,13 @@
       <button class="sort-btn" id="sort-suit" type="button">Sort by Suit</button>
     </div>
     <div class="hand" id="hand-0"></div>
+    <!-- Drag-to-discard drop zone — absolutely positioned inside zone-0 but
+         the height is large enough that the element overflows upward into the
+         center grid cell. So the entire empty area between the draw pile and
+         the player's hand counts as a valid drop. Invisible by default — only
+         a soft peach tint appears on drag-over so the player knows the drop
+         registered. -->
+    <div id="discard-zone"></div>
     <div class="player-info">
       <span class="avatar" id="avatar-0">🎮</span>
       <span class="player-name" id="pname-0">You</span>
@@ -122,6 +129,11 @@
 
 <!-- ── Ù / Ù Khan celebration overlay (B8) ──────────────────── -->
 <div id="u-celebration"></div>
+
+<!-- ── Đền toast (T1 / T3) — center-screen banner, distinct from the Ù
+     celebration so the consequence reads at a glance. T2 is already covered
+     by the existing Khan-style overlay. ─────────────────────────────────── -->
+<div id="den-toast"></div>
 
 <!-- ── Status bar ─────────────────────────────────────────────── -->
 <div id="status-bar">

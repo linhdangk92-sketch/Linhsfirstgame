@@ -5,6 +5,24 @@
 /* Placement points: index = finishing rank (0=1st, 1=2nd, 2=3rd, 3=last) */
 const PLACE_POINTS = [6, -1, -2, -3];
 
+/* Plain-language labels for the three Đền paths — used by the immediate
+   center-screen Đền banner. T1/T2/T3 are kept as internal trigger codes;
+   only these strings are shown to the player. */
+const DEN_LABELS = {
+  T1: 'Đền — Stolen Final & Opponent Ù',
+  T2: 'Đền — Triple Steal Out',
+  T3: 'Đền — Ù via Stolen Card',
+};
+
+/* Small ordinal helper for "1st Móm", "2nd Móm", … Only needs to handle 1–4
+   since the game has 4 players. */
+function ordinal(n) {
+  if (n === 1) return '1st';
+  if (n === 2) return '2nd';
+  if (n === 3) return '3rd';
+  return n + 'th';
+}
+
 /* B8: animated celebration overlay shown when a player declares Ù or Ù Khan.
    Regular Ù: peach/cream card, ~2.5s auto-fade. Ù Khan: bigger gold-gradient
    card with a pulsing glow and larger particle burst, ~4s. The overlay has
@@ -97,18 +115,20 @@ function showRoundWinCelebration(playerName, roundNumber, points, isHuman) {
 /* Declare Ù (or Ù Khan if isKhan=true) for playerIdx.
    Three scoring branches per the Đền rules:
    • T3 (state.pendingTrigger3 matches the winner): the stolen card itself
-     completed the winner's Ù. Winner +15 normal but pays −5 to the player
-     they ăn chốt'd from; that player's Ù-loss is cancelled so they end at 0.
-     Others still pay the normal −5 Ù loss.
+     completed the winner's Ù. Winner +15 − 5 = +10, victim 0, others −5.
    • T1 (state.denLiable.stealerIdx !== playerIdx): someone OTHER than the
-     winner is on the Đền hook. They absorb everyone else's −5 (paying −15
-     total); the 2 non-winner non-Đền-payer players end at 0.
-   • Normal Ù: winner +15, everyone else −5. Also covers the "ăn chốt-er
-     Ù's via a different card" case — they keep their +15 cleanly.
-   The winner's hand is all phỏm — lay it all down so it's visible on the table. */
+     winner is on the Đền hook. Winner +15, Đền-payer −15, others 0.
+   • Normal Ù: winner +15, everyone else −5.
+   The flow: lay down winner's hand → compute per-player round scores → fire
+   Đền banner + per-player payment toasts (if Đền) → Ù/Khan celebration →
+   recap modal (deferred) → user clicks "Add to Scoreboard" → scoreboard
+   visually updates and Next Round button appears. cumScore IS updated
+   immediately so internal state stays consistent; only renderScores() is
+   deferred to the recap dismissal. */
 function declareU(playerIdx, isKhan = false) {
   state.phase = 'scoring';
   const label = isKhan ? 'Ù Khan' : 'Ù';
+  const name  = PLAYER_CFG[playerIdx].name;
 
   // Lay down the winner's entire hand (all phỏm, zero rác)
   const { groups } = findBestPhoms(state.players[playerIdx].hand);
@@ -119,69 +139,117 @@ function declareU(playerIdx, isKhan = false) {
   const isT3 = t3 && t3.winnerIdx === playerIdx;
   const isT1 = !isT3 && state.denLiable && state.denLiable.stealerIdx !== playerIdx;
 
-  let denNote = '';
+  // Compute per-player round score (this round's delta only) so the recap
+  // can show one clean total per row and per-player payment toasts can fire.
+  const roundScores = [0, 0, 0, 0];
+  let denPayerIdx   = null; // for T1
+  let denVictimIdx  = null; // for T3 or T1
 
   if (isT3) {
-    // T3: winner +15 − 5 (Đền) = +10. Victim −5 + 5 = 0. Others −5 each.
-    state.players[playerIdx].cumScore += 15;
-    state.players.forEach((p, i) => { if (i !== playerIdx) p.cumScore -= 5; });
-    state.players[playerIdx].cumScore   -= 5;  // pay Đền to victim
-    state.players[t3.victimIdx].cumScore += 5; // victim refunded their Ù loss
-    denNote = '  ⚡ Đền T3: ' + PLAYER_CFG[playerIdx].name + ' pays −5 to ' +
-              PLAYER_CFG[t3.victimIdx].name + ' (Ù via Ăn Chốt).';
-  } else if (isT1) {
-    // T1: winner +15, Đền-payer absorbs all 3 losers' −5 each (net −15),
-    // the other 2 losers end at 0. Effectively: do normal +15/−5 then
-    // refund the 2 non-Đền-payer losers their −5 each.
-    state.players[playerIdx].cumScore += 15;
-    state.players.forEach((p, i) => { if (i !== playerIdx) p.cumScore -= 5; });
-    const denPayerIdx = state.denLiable.stealerIdx;
-    state.players.forEach((p, i) => {
-      if (i !== playerIdx && i !== denPayerIdx) p.cumScore += 5; // refund non-payers
+    // T3: winner +10 net, victim 0, others −5.
+    roundScores[playerIdx]    = 10;
+    roundScores[t3.victimIdx] = 0;
+    denVictimIdx = t3.victimIdx;
+    state.players.forEach((_, i) => {
+      if (i !== playerIdx && i !== t3.victimIdx) roundScores[i] = -5;
     });
-    denNote = '  ⚡ Đền T1: ' + PLAYER_CFG[denPayerIdx].name + ' pays −15 (Ăn Chốt then ' +
-              PLAYER_CFG[playerIdx].name + ' Ù\'d).';
+  } else if (isT1) {
+    // T1: winner +15, Đền-payer −15, others 0.
+    denPayerIdx  = state.denLiable.stealerIdx;
+    denVictimIdx = state.denLiable.victimIdx;
+    roundScores[playerIdx]    = 15;
+    roundScores[denPayerIdx]  = -15;
+    // Other 2 players stay at 0 (already initialised)
   } else {
-    // Normal Ù: +15 / −5 across the board.
-    state.players[playerIdx].cumScore += 15;
-    state.players.forEach((p, i) => { if (i !== playerIdx) p.cumScore -= 5; });
+    // Normal Ù: winner +15, others −5.
+    roundScores[playerIdx] = 15;
+    state.players.forEach((_, i) => { if (i !== playerIdx) roundScores[i] = -5; });
   }
+
+  // Apply to state. cumScore + roundScore updated; renderScores is deferred.
+  state.players.forEach((p, i) => {
+    p.roundScore = roundScores[i];
+    p.cumScore  += roundScores[i];
+  });
 
   // Clean up Đền state so it doesn't leak into the next round / Ù path
   state.pendingTrigger3 = null;
   state.denLiable       = null;
 
-  // Ù winner deals next round
   state.lastWinnerIdx = playerIdx;
 
-  renderScores();
+  setStatus(name + ' wins with ' + label + '!');
 
-  const name = PLAYER_CFG[playerIdx].name;
-  setStatus(name + ' wins with ' + label + '!  +15 pts · everyone else −5 pts.' + denNote);
+  // Immediate Đền announcement (only for T1/T3): center-screen banner with
+  // short tag + plain-English reason. Normal Ù skips this — the celebration
+  // overlay carries the moment on its own.
+  if (isT3) {
+    showDenToast(DEN_LABELS.T3,
+      name + " Ù'd using " + PLAYER_CFG[denVictimIdx].name + "'s stolen final discard");
+  } else if (isT1) {
+    showDenToast(DEN_LABELS.T1,
+      PLAYER_CFG[denPayerIdx].name + " stole " + PLAYER_CFG[denVictimIdx].name +
+      "'s final discard, then " + name + " Ù'd");
+  }
+
+  // Per-player payment toasts on each affected zone (green for gain, red for
+  // loss). Zero deltas are silently skipped by the helper.
+  state.players.forEach((_, i) => showScoreChangeToast(i, roundScores[i]));
 
   // B8: celebration overlay — distinct visuals for Ù vs Ù Khan.
   showUCelebration(name, isKhan);
 
-  const isLastRound = state.roundNumber >= TOTAL_ROUNDS;
-  renderActionBar([makeBtn(
-    isLastRound ? 'See Final Results' : 'Next Round →',
-    'btn-laydown',
-    () => { isLastRound ? showGameOver() : (state.roundNumber++, dealRound()); }
-  )]);
+  // Recap modal fires AFTER the celebration finishes fading. Khan is longer
+  // (4s) than regular Ù (2.5s); +400ms buffer lets the Đền banner (2.5s)
+  // and Ù card both settle out before the recap card pops in.
+  const celebrationDur = isKhan ? 4000 : 2500;
+  setTimeout(() => {
+    const breakdown = state.players.map((p, i) => {
+      /* The T3 victim ends at net 0 (their −5 Ù loss + 5 Đền refund). Show
+         a "Đền refund −5+5" tag on their row so the 0 isn't ambiguous. */
+      const isT3Victim = isT3 && t3 && i === t3.victimIdx;
+      return {
+        idx:    i,
+        name:   PLAYER_CFG[i].name,
+        total:  roundScores[i],
+        isMom:  false, // Ù paths don't apply Móm penalty — skip the tag
+        tag:    isT3Victim ? 'Đền refund −5+5' : null,
+      };
+    }).sort((a, b) => b.total - a.total);
+
+    showRoundRecap(state.roundNumber, breakdown, () => {
+      renderScores();
+      const isLastRound = state.roundNumber >= TOTAL_ROUNDS;
+      renderActionBar([makeBtn(
+        isLastRound ? 'See Final Results' : 'Next Round →',
+        'btn-laydown',
+        () => { isLastRound ? showGameOver() : (state.roundNumber++, dealRound()); }
+      )]);
+    });
+  }, celebrationDur + 400);
 }
 
 /* Đền Trigger 2 — the immediate-next-player has cumulatively stolen 3 of the
    victim's discards. Round ends instantly. The stealer is "considered Ù'd"
    and scores +15; the victim covers everybody (−15); the other two players
-   end at 0. No placement points and no Móm penalty are applied — same as a
-   normal Ù path. Uses the elaborate Ù Khan celebration visuals to highlight
-   how rare/punishing this trigger is. */
+   end at 0. Flow mirrors declareU: cumScore updated immediately; renderScores
+   deferred to the recap "Add to Scoreboard" click. Uses Ù Khan visuals
+   (gold/pulsing/30-particle) to highlight how rare/punishing T2 is. */
 function declareTriggerTwo(stealerIdx, victimIdx) {
   state.phase = 'scoring';
 
-  // T2 math: stealer +15, victim −15, others 0
-  state.players[stealerIdx].cumScore += 15;
-  state.players[victimIdx].cumScore  -= 15;
+  const stealerName = PLAYER_CFG[stealerIdx].name;
+  const victimName  = PLAYER_CFG[victimIdx].name;
+
+  // T2 round-score deltas: stealer +15, victim −15, others 0
+  const roundScores = [0, 0, 0, 0];
+  roundScores[stealerIdx] = 15;
+  roundScores[victimIdx]  = -15;
+
+  state.players.forEach((p, i) => {
+    p.roundScore = roundScores[i];
+    p.cumScore  += roundScores[i];
+  });
 
   // Clean up Đền state so a stale denLiable can't leak into the next round
   state.pendingTrigger3 = null;
@@ -190,96 +258,203 @@ function declareTriggerTwo(stealerIdx, victimIdx) {
   // Stealer (who "Ù'd") deals the next round
   state.lastWinnerIdx = stealerIdx;
 
-  renderScores();
+  setStatus('⚡ Đền T2!  ' + stealerName + ' (considered Ù)');
 
-  const stealerName = PLAYER_CFG[stealerIdx].name;
-  const victimName  = PLAYER_CFG[victimIdx].name;
-  setStatus('⚡ Đền T2!  ' + stealerName + ' (considered Ù) +15  ·  ' +
-            victimName + ' −15 (paid for all)  ·  others 0');
+  // Immediate announcement: center banner + per-player payment toasts.
+  showDenToast(DEN_LABELS.T2,
+    stealerName + ' stole 3 of ' + victimName + "'s discards — counts as Ù");
+  state.players.forEach((_, i) => showScoreChangeToast(i, roundScores[i]));
 
-  // Reuse Ù Khan visuals (gold/pulsing/30-particle) with custom text.
+  // Khan-style celebration for the rare T2 event
   showUCelebration(stealerName, true,
     stealerName + ' steals 3 from ' + victimName + ' — Đền T2! 🏆');
 
-  const isLastRound = state.roundNumber >= TOTAL_ROUNDS;
-  renderActionBar([makeBtn(
-    isLastRound ? 'See Final Results' : 'Next Round →',
-    'btn-laydown',
-    () => { isLastRound ? showGameOver() : (state.roundNumber++, dealRound()); }
-  )]);
+  // Recap modal fires after the Khan celebration (4s) + 400ms buffer
+  setTimeout(() => {
+    const breakdown = state.players.map((p, i) => ({
+      idx:    i,
+      name:   PLAYER_CFG[i].name,
+      total:  roundScores[i],
+      isMom:  false, // T2 doesn't apply Móm penalty
+    })).sort((a, b) => b.total - a.total);
+
+    showRoundRecap(state.roundNumber, breakdown, () => {
+      renderScores();
+      const isLastRound = state.roundNumber >= TOTAL_ROUNDS;
+      renderActionBar([makeBtn(
+        isLastRound ? 'See Final Results' : 'Next Round →',
+        'btn-laydown',
+        () => { isLastRound ? showGameOver() : (state.roundNumber++, dealRound()); }
+      )]);
+    });
+  }, 4400);
 }
 
-/* Called when all players have laid down. Ranks players by rác total,
-   applies placement points + Móm penalty, then shows results. */
+/* Called when all players have laid down. Ranks players by rác total, applies
+   placement points + Móm penalty, then shows a recap modal as the reveal
+   step. cumScore is updated immediately (so state stays consistent) but
+   renderScores() is deferred until the user clicks the "Add to Scoreboard"
+   button on the recap — that's the visual "your score lands now" moment. */
 function endRound() {
   state.phase = 'scoring';
+  renderActionBar([]); // clear any lingering buttons from the round
 
   // Reveal all AI hands now that the round is over so players can see opponents' rác
   renderAll();
 
   // Cards still in hand after lay-down = rác (trash) = penalty points
   const results = state.players.map((p, i) => ({
-    idx:      i,
-    name:     PLAYER_CFG[i].name,
-    racTotal: p.hand.reduce((sum, c) => sum + RANK_VALUE[c.rank], 0),
-    isMom:    p.isMom,
+    idx:          i,
+    name:         PLAYER_CFG[i].name,
+    racTotal:     p.hand.reduce((sum, c) => sum + RANK_VALUE[c.rank], 0),
+    isMom:        p.isMom,
+    lapClosedAt:  p.lapClosedAt,
   }));
 
-  // Sort ascending by rác — lowest rác = 1st place
-  results.sort((a, b) => a.racTotal - b.racTotal);
-
-  // Apply placement points to cumulative scores
-  results.forEach((r, rank) => {
-    state.players[r.idx].roundScore = PLACE_POINTS[rank];
-    state.players[r.idx].cumScore  += PLACE_POINTS[rank];
+  /* Sort: non-Móm players first (ranked by rác ascending); Móm players ALWAYS
+     sink to the bottom regardless of rác count. Among Móm players, lap-close
+     order breaks the tie — whoever lap-closed first is "1st Móm" and gets the
+     less-bad placement; whoever closed later becomes "2nd Móm" (or 3rd, etc.)
+     and ends up in the last-place slot. */
+  results.sort((a, b) => {
+    if (a.isMom !== b.isMom) return a.isMom ? 1 : -1;
+    if (a.isMom)             return a.lapClosedAt - b.lapClosedAt;
+    return a.racTotal - b.racTotal;
   });
 
-  // Móm penalty: each Móm player loses 4 pts and pays them to the 1st-place winner
-  const winner = results[0];
+  /* Tag each Móm player with their position WITHIN the Móm group (1, 2, …)
+     so the summary and recap can show "1st Móm", "2nd Móm", etc. */
+  let momIdx = 0;
   results.forEach(r => {
     if (r.isMom) {
-      state.players[r.idx].cumScore      -= 4;
-      state.players[winner.idx].cumScore += 4;
+      momIdx++;
+      r.momPosition = momIdx;
     }
   });
 
-  // Note: There is intentionally NO per-Ăn-Chốt scoring at round-end. All
-  // Ăn Chốt consequences are routed through Đền (declareU branches and
-  // declareTriggerTwo) — and Đền only fires if Ù happens or the streak hits
-  // 3, both of which short-circuit endRound entirely. A round that ends
-  // normally (no Ù, no T2) means no Ăn Chốt scoring even if some happened.
+  const winnerIdx = results[0].idx;
+  const momCount  = results.filter(r => r.isMom).length;
 
-  // 1st-place finisher deals the next round
-  state.lastWinnerIdx = winner.idx;
+  /* Compute the per-player round score INCLUDING all bonuses, so the recap
+     can show one clean total per row. The winner picks up +4 per Móm player.
+     Note: NO per-Ăn-Chốt scoring at round-end — all Ăn Chốt consequences are
+     routed through Đền (declareU branches / declareTriggerTwo) which
+     short-circuit endRound, so a round that reaches here had no Đền. */
+  results.forEach((r, rank) => {
+    let total = PLACE_POINTS[rank];
+    if (r.isMom)             total -= 4;
+    if (r.idx === winnerIdx) total += momCount * 4;
+    r.total = total;
+    // Apply to state immediately — renderScores is deferred to the modal click.
+    state.players[r.idx].roundScore = total;
+    state.players[r.idx].cumScore  += total;
+  });
 
-  renderScores();
+  state.lastWinnerIdx = winnerIdx;
 
-  // Build a summary line: "1. You — 3 rác  ·  2. Chaos — 11 rác (Móm)  · …"
+  // Status bar gets the textual summary (always visible behind the modal).
+  // Móm players show "Nth Móm" (rác doesn't determine their position so
+  // showing the number would be misleading); non-Móm players show their rác.
   const summary = results.map((r, rank) =>
-    (rank + 1) + '. ' + r.name + ' — ' + r.racTotal + ' rác' + (r.isMom ? ' (Móm)' : '')
+    (rank + 1) + '. ' + r.name + ' — ' +
+    (r.isMom ? ordinal(r.momPosition) + ' Móm' : r.racTotal + ' rác')
   ).join('  ·  ');
-
   setStatus('Round ' + state.roundNumber + ' over!  ' + summary);
 
-  // Round-win celebration overlay — tier 1 (smaller than Ù).
-  // Total round points for the winner = placement (+6) + 4 per Móm player.
-  const momCount     = results.filter(r => r.isMom).length;
-  const winnerPoints = PLACE_POINTS[0] + momCount * 4;
-  showRoundWinCelebration(winner.name, state.roundNumber, winnerPoints, winner.idx === 0);
+  // The reveal: modal with the breakdown + "Add to Scoreboard" button.
+  // Clicking the button calls renderScores (scoreboard finally updates) and
+  // surfaces the Next Round button.
+  showRoundRecap(state.roundNumber, results, () => {
+    renderScores();
 
-  const isLastRound = state.roundNumber >= TOTAL_ROUNDS;
-  renderActionBar([makeBtn(
-    isLastRound ? 'See Final Results' : 'Next Round →',
-    'btn-laydown',
-    () => {
-      if (isLastRound) {
-        showGameOver();
-      } else {
-        state.roundNumber++;
-        dealRound();
+    const isLastRound = state.roundNumber >= TOTAL_ROUNDS;
+    renderActionBar([makeBtn(
+      isLastRound ? 'See Final Results' : 'Next Round →',
+      'btn-laydown',
+      () => {
+        if (isLastRound) {
+          showGameOver();
+        } else {
+          state.roundNumber++;
+          dealRound();
+        }
       }
-    }
-  )]);
+    )]);
+  });
+}
+
+/* Round-end recap modal — center-screen card listing each player's rác total,
+   Móm tag, and round score change. The user must click "Add to Scoreboard"
+   to dismiss; on dismiss, onContinue fires (which is where the scoreboard
+   actually updates and the Next Round button appears). The 1st-place row
+   gets a gold-highlighted border so the winner stands out. */
+function showRoundRecap(roundNum, results, onContinue) {
+  const overlay = document.createElement('div');
+  overlay.className = 'recap-overlay';
+
+  const card = document.createElement('div');
+  card.className = 'recap-card';
+
+  const title = document.createElement('div');
+  title.className = 'recap-title';
+  title.textContent = 'Round ' + roundNum + ' Results';
+  card.appendChild(title);
+
+  const list = document.createElement('div');
+  list.className = 'recap-list';
+
+  results.forEach((r, rank) => {
+    const row = document.createElement('div');
+    row.className = 'recap-row' + (rank === 0 ? ' winner' : '');
+
+    const rankEl = document.createElement('span');
+    rankEl.className = 'recap-rank';
+    rankEl.textContent = (rank + 1) + '.';
+
+    const nameEl = document.createElement('span');
+    nameEl.className = 'recap-name';
+    nameEl.textContent = r.name;
+
+    const tagsEl = document.createElement('span');
+    tagsEl.className = 'recap-tags';
+    /* The tag column shows a row-specific note. The caller can set r.tag
+       directly for custom text (e.g., "Đền refund −5+5" on the T3 victim
+       row to explain why their score is 0). If no custom tag is provided,
+       fall back to the "Nth Móm" sub-ranking label for Móm players, and
+       blank for everyone else. */
+    let tagText = r.tag || '';
+    if (!tagText && r.isMom) tagText = ordinal(r.momPosition) + ' Móm';
+    tagsEl.textContent = tagText;
+
+    const scoreEl = document.createElement('span');
+    scoreEl.className = 'recap-score ' +
+      (r.total > 0 ? 'positive' : (r.total < 0 ? 'negative' : ''));
+    scoreEl.textContent = (r.total > 0 ? '+' : '') + r.total;
+
+    row.appendChild(rankEl);
+    row.appendChild(nameEl);
+    row.appendChild(tagsEl);
+    row.appendChild(scoreEl);
+
+    list.appendChild(row);
+  });
+  card.appendChild(list);
+
+  const btn = makeBtn('Add to Scoreboard', 'btn-laydown', () => {
+    overlay.classList.remove('show');
+    setTimeout(() => overlay.remove(), 300);
+    onContinue();
+  });
+  btn.classList.add('recap-btn');
+  card.appendChild(btn);
+
+  overlay.appendChild(card);
+  document.body.appendChild(overlay);
+
+  /* Force layout before adding .show so the pop-in animation runs (without
+     this the browser batches initial + .show styles and skips the transition). */
+  void overlay.offsetWidth;
+  overlay.classList.add('show');
 }
 
 /* Show the final game-over screen with cumulative scores and a Play Again button.

@@ -71,33 +71,73 @@ function combinations(arr, k) {
   ];
 }
 
-/* Greedy phỏm finder — tries 4-card groups first (harder to form → higher priority),
-   then 3-card groups. Repeats until no more valid groups can be found.
-   Returns { groups: [[...cards], ...], rac: [...cards] } */
-function findBestPhoms(hand) {
-  const remaining = [...hand];
-  const groups    = [];
+/* Optimal phỏm finder — explores every legal way to partition the hand into
+   phỏm + leftover and returns the partition with the LOWEST rác point total.
+   Replaces an earlier greedy version that could miss the best answer when two
+   possible phỏm overlapped — e.g. hand contains both a 4-5-6 thông (in one
+   suit) and 5-5-5 + 6-6-6 sám cô (where the 5 and 6 in the thông are reused
+   for the sám cô). Greedy locked in the thông and threw away the sám cô; this
+   version sees both options and picks 5-5-5 + 6-6-6 because it leaves only
+   the 4 as rác.
 
-  let found = true;
-  while (found) {
-    found = false;
-    for (const size of [4, 3]) {
-      for (const combo of combinations(remaining, size)) {
-        if (isValidPhom(combo)) {
-          groups.push(combo);
-          combo.forEach(c => {
-            const i = remaining.indexOf(c);
-            if (i !== -1) remaining.splice(i, 1);
-          });
-          found = true;
-          break;
+   Algorithm: backtracking with two anti-explosion tricks —
+   • Canonicalization: at every recursion step, any phỏm we extract MUST
+     include the first card of `remaining`. The first card either goes into
+     a phỏm or is locked as rác. This makes each unique partition visited
+     exactly once instead of once per ordering.
+   • Prune: if `racSoFar` already meets/exceeds the best rác value found so
+     far, we can't improve from this branch — return early.
+
+   Returns { groups: [[...cards], ...], rac: [...cards] }. */
+function findBestPhoms(hand) {
+  const sumValues = arr => arr.reduce((s, c) => s + RANK_VALUE[c.rank], 0);
+
+  let best       = { groups: [], rac: hand.slice() };
+  let bestRacVal = sumValues(hand);
+
+  function search(remaining, racSoFar, groups) {
+    const racValSoFar = sumValues(racSoFar);
+    if (racValSoFar >= bestRacVal) return; // prune — can't beat best
+
+    if (remaining.length === 0) {
+      // Leaf: everything decided. racSoFar is the candidate rác.
+      if (racValSoFar < bestRacVal) {
+        bestRacVal = racValSoFar;
+        best = { groups: groups.slice(), rac: racSoFar.slice() };
+      }
+      return;
+    }
+
+    const first = remaining[0];
+    const rest  = remaining.slice(1);
+
+    // Try every phỏm containing `first` (4-card first so good solutions
+    // surface early and the prune fires more aggressively on later branches).
+    if (rest.length >= 3) {
+      for (const combo of combinations(rest, 3)) {
+        const group = [first, ...combo];
+        if (isValidPhom(group)) {
+          const next = rest.filter(c => !combo.includes(c));
+          search(next, racSoFar, [...groups, group]);
         }
       }
-      if (found) break;
     }
+    if (rest.length >= 2) {
+      for (const combo of combinations(rest, 2)) {
+        const group = [first, ...combo];
+        if (isValidPhom(group)) {
+          const next = rest.filter(c => !combo.includes(c));
+          search(next, racSoFar, [...groups, group]);
+        }
+      }
+    }
+
+    // Last branch: `first` is rác (locked). Continue with the remaining cards.
+    search(rest, [...racSoFar, first], groups);
   }
 
-  return { groups, rac: remaining };
+  search(hand.slice(), [], []);
+  return best;
 }
 
 // ── Ù Detection ───────────────────────────────────────────────────

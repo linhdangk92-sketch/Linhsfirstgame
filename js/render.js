@@ -95,8 +95,22 @@ function renderHumanHand(isDiscardPhase) {
   const handEl = document.getElementById('hand-0');
   handEl.innerHTML = '';
   let dragSrcIdx = null;
+  /* Used by the discard-phase fan-out heuristic. We snapshot the cursor X at
+     dragstart and compare in dragover — once cursor moves >30px horizontally,
+     the player is clearly reordering, so we fan the hand out. Straight-up
+     drags (discard intent) never cross the threshold and the hand stays
+     compact. Tuned threshold: 30px ≈ half a card visible width. */
+  let dragStartX = 0;
+  const HAND_FANOUT_DX = 30;
 
   const hand = state.players[0].hand;
+
+  /* Hide the sort toolbar when the hand has fewer than 6 cards — at that
+     size sorting isn't useful (you can scan them at a glance) and the empty
+     buttons just add visual noise. Re-evaluated on every render so the
+     toolbar reappears once you're back above the threshold. */
+  const toolbarEl = document.querySelector('.hand-toolbar');
+  if (toolbarEl) toolbarEl.style.display = hand.length < 6 ? 'none' : 'flex';
 
   /* Wire up the auto-sort buttons above the hand. Using .onclick (rather than
      addEventListener) means each renderHumanHand call simply replaces the
@@ -149,6 +163,17 @@ function renderHumanHand(isDiscardPhase) {
     if (dragSrcIdx === null) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
+    /* Discard-phase fan-out trigger: once the player has moved their cursor
+       horizontally by more than HAND_FANOUT_DX, treat that as reorder intent
+       and fan the hand out. Straight-up discard drags never cross the
+       threshold so the hand stays compact through a discard. Once added,
+       the class is only removed when the cursor enters the discard zone
+       (see discardZoneEl.ondragover) or the drag ends (dragend). */
+    if (isDiscardPhase && !handEl.classList.contains('is-dragging')) {
+      if (Math.abs(e.clientX - dragStartX) > HAND_FANOUT_DX) {
+        handEl.classList.add('is-dragging');
+      }
+    }
     highlightGap(findGapIdx(e.clientX));
   };
 
@@ -169,6 +194,50 @@ function renderHumanHand(isDiscardPhase) {
     renderHumanHand(state.phase === 'discard-prompt');
   };
 
+  /* Drag-to-discard drop zone — anchored inside #zone-0 but overflowing
+     upward so it covers the entire area between the draw pile and the hand.
+     Only active during the discard phase (.discard-mode class + handlers).
+     Using .ondragover / .ondrop property assignment so each render replaces
+     the previous handler — no listener pile-up across re-renders. */
+  const discardZoneEl = document.getElementById('discard-zone');
+  if (discardZoneEl) {
+    if (isDiscardPhase) {
+      discardZoneEl.classList.add('discard-mode');
+      discardZoneEl.ondragover = (e) => {
+        if (dragSrcIdx === null) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        /* If the player triggered reorder fan-out earlier in this drag but
+           is now aiming at the discard zone, collapse the hand back to its
+           compact state. The drop will discard the dragged card. */
+        handEl.classList.remove('is-dragging');
+        discardZoneEl.classList.add('drag-over');
+      };
+      /* dragleave fires on every child→parent transition too; only clear
+         the highlight when the cursor genuinely leaves the zone. */
+      discardZoneEl.ondragleave = (e) => {
+        if (!discardZoneEl.contains(e.relatedTarget)) {
+          discardZoneEl.classList.remove('drag-over');
+        }
+      };
+      discardZoneEl.ondrop = (e) => {
+        if (dragSrcIdx === null) return;
+        e.preventDefault();
+        discardZoneEl.classList.remove('drag-over');
+        const card = hand[dragSrcIdx];
+        dragSrcIdx = null;
+        clearAllTimers();
+        performDiscard(0, card);
+      };
+    } else {
+      discardZoneEl.classList.remove('discard-mode');
+      discardZoneEl.classList.remove('drag-over');
+      discardZoneEl.ondragover = null;
+      discardZoneEl.ondragleave = null;
+      discardZoneEl.ondrop = null;
+    }
+  }
+
   /* Build one gap-zone div. Purely visual — no event handlers. The data-gap-idx
      attribute lets the container's handlers find the right one to highlight. */
   const makeGap = (gapIdx) => {
@@ -188,9 +257,16 @@ function renderHumanHand(isDiscardPhase) {
 
     el.addEventListener('dragstart', (e) => {
       dragSrcIdx  = idx;
+      dragStartX  = e.clientX;
       _wasDragged = true;
       el.classList.add('dragging');
-      handEl.classList.add('is-dragging');
+      /* The "is-dragging" class spreads the hand out (reveals gap zones)
+         for sort-by-drag. In discard phase we DEFER it — only adding when
+         the cursor moves horizontally past HAND_FANOUT_DX (set in
+         handEl.ondragover). That way a clean upward drag (discard intent)
+         keeps the hand compact, while a sideways drag (reorder intent)
+         triggers the fan-out as soon as the player crosses the threshold. */
+      if (!isDiscardPhase) handEl.classList.add('is-dragging');
       e.dataTransfer.effectAllowed = 'move';
       /* setData is REQUIRED in Firefox for drag-and-drop to actually start.
          The payload itself is unused — we read state from dragSrcIdx. */
@@ -201,18 +277,16 @@ function renderHumanHand(isDiscardPhase) {
       el.classList.remove('dragging');
       handEl.classList.remove('is-dragging');
       handEl.querySelectorAll('.gap-zone.drag-over').forEach(g => g.classList.remove('drag-over'));
+      const discardZoneEl = document.getElementById('discard-zone');
+      if (discardZoneEl) discardZoneEl.classList.remove('drag-over');
       dragSrcIdx = null;
       /* brief delay so click event (if it fires) sees _wasDragged = true */
       setTimeout(() => { _wasDragged = false; }, 50);
     });
 
-    if (isDiscardPhase) {
-      el.addEventListener('click', () => {
-        if (_wasDragged) return; // drag ended — don't treat as a discard click
-        clearAllTimers();
-        performDiscard(0, card);
-      });
-    }
+    // No click-to-discard anymore — discards happen by dragging the card onto
+    // the center drop zone (wired below). Click is intentionally inert so a
+    // stray click can't accidentally discard the wrong card.
 
     handEl.appendChild(el);
   });
@@ -340,4 +414,89 @@ function renderAll() {
 function setStatus(msg, right = '') {
   document.getElementById('status-msg').textContent   = msg;
   document.getElementById('status-right').textContent = right;
+}
+
+/* Internal: append a toast pill to a player's .player-info bar, fade it in,
+   linger, then fade out + remove. Pure DOM mechanics; styling and per-zone
+   direction are handled by the toastClass + the .player-info parent.
+   Used by showAnChotToast and showMomToast — keep them sharing one mechanism
+   so timing/animation stay consistent and changes only need to be made once. */
+function _showPlayerToast(playerIdx, toastClass, text) {
+  const pinfo = document.querySelector('#zone-' + playerIdx + ' .player-info');
+  if (!pinfo) return;
+
+  // Remove any existing toast of the same kind first (re-entry safety).
+  pinfo.querySelectorAll('.' + toastClass).forEach(t => t.remove());
+
+  const toast = document.createElement('div');
+  toast.className = toastClass;
+  toast.textContent = text;
+  pinfo.appendChild(toast);
+
+  // Force layout so the off-screen transform is the starting point of the
+  // CSS transition (without this the browser would batch initial + .show
+  // styles into one paint and skip the animation).
+  void toast.offsetWidth;
+  toast.classList.add('show');
+
+  setTimeout(() => {
+    toast.classList.remove('show');
+    setTimeout(() => toast.remove(), 300); // matches transition duration
+  }, 1500);
+}
+
+/* Show the Ăn Chốt toast next to a specific player's .player-info bar.
+   Fires whenever that player steals a final (4th) discard. */
+function showAnChotToast(playerIdx) {
+  _showPlayerToast(playerIdx, 'an-chot-toast', '⚡ Ăn Chốt!');
+}
+
+/* Show the Móm toast next to a specific player's .player-info bar.
+   Fires at lap-close when the player has laid down zero phỏm the whole
+   round — they take the −4 Móm penalty and pay another +4 to the winner.
+   Distinct dark-slate coloring so it's never mistaken for the yellow Ăn Chốt. */
+function showMomToast(playerIdx) {
+  _showPlayerToast(playerIdx, 'mom-toast', '💀 Móm!');
+}
+
+/* Show a per-player score-change toast (used by Đền payments). Positive deltas
+   get a green pill ("+15"), negative deltas a red pill ("−15"). Zero deltas
+   are skipped — no toast for an unaffected player. Uses the en-dash for
+   negatives so it reads cleaner than a plain hyphen. */
+function showScoreChangeToast(playerIdx, delta) {
+  if (delta === 0) return;
+  const variant = delta > 0 ? 'gain-toast' : 'loss-toast';
+  const text    = (delta > 0 ? '+' : '−') + Math.abs(delta);
+  _showPlayerToast(playerIdx, variant, text);
+}
+
+/* Show the center-screen Đền toast for T1/T3. label = "Đền T1" / "Đền T3";
+   detail = a short human-readable line describing the consequence. The toast
+   sits at top: 22% so it doesn't collide with the centered Ù celebration card
+   that fires simultaneously. */
+function showDenToast(label, detail) {
+  const overlay = document.getElementById('den-toast');
+  if (!overlay) return;
+
+  overlay.innerHTML = '';
+
+  const labelEl = document.createElement('div');
+  labelEl.className = 'den-label';
+  labelEl.textContent = '⚡ ' + label + ' ⚡';
+  overlay.appendChild(labelEl);
+
+  const detailEl = document.createElement('div');
+  detailEl.className = 'den-detail';
+  detailEl.textContent = detail;
+  overlay.appendChild(detailEl);
+
+  /* Force the .show class to be applied on a separate frame so the entrance
+     transition actually runs (same trick as the Ăn Chốt toast above). */
+  void overlay.offsetWidth;
+  overlay.classList.add('show');
+
+  setTimeout(() => {
+    overlay.classList.remove('show');
+    setTimeout(() => { overlay.innerHTML = ''; }, 400);
+  }, 2500);
 }

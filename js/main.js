@@ -29,11 +29,14 @@ function dealRound() {
     p.roundScore   = 0;
     p.isMom        = true;
     p.stolenStreak = 0;
+    p.firstTurn    = true;
+    p.lapClosedAt  = 0;
   });
 
   // Đền state resets — most-recent Ăn Chốt event + any pending T3 marker
   state.denLiable        = null;
   state.pendingTrigger3  = null;
+  state.lapCloseCounter  = 0;
 
   // Dealer = winner of previous round; P0 for round 1.
   const dealerIdx = state.roundNumber === 1 ? 0 : state.lastWinnerIdx;
@@ -61,16 +64,10 @@ function dealRound() {
     : PLAYER_CFG[dealerIdx].name + ' is the dealer — they discard first.';
   setStatus('Round ' + state.roundNumber + ' · ' + dealerLabel);
 
-  // Check every player for Ù Khan right after the deal — before any turns.
-  // Ù Khan: a hand with zero pairs and zero near-sequences (completely hopeless).
-  // The first player found with Ù Khan declares immediately and wins the round.
-  const uKhanIdx = [0, 1, 2, 3].find(i => isUKhan(state.players[i].hand));
-  if (uKhanIdx !== undefined) {
-    setStatus(PLAYER_CFG[uKhanIdx].name + ' has Ù Khan! Round over before it starts!');
-    setTimeout(() => declareU(uKhanIdx, true), 900);
-  } else {
-    setTimeout(() => startTurn(), 400);
-  }
+  // Ù Khan check now happens per-player at the start of THEIR first turn
+  // (in startTurn) — that gives the human a chance to choose to declare or
+  // skip, and lets each player's check run on their own untouched dealt hand.
+  setTimeout(() => startTurn(), 400);
 }
 
 // ── Start ─────────────────────────────────────────────────────────

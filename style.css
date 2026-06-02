@@ -92,6 +92,9 @@ body {
   border-radius: 14px;
   padding: 6px;
   transition: transform 0.25s ease, filter 0.25s ease;
+  /* Positioned so children using position:absolute (sort toolbar, toasts)
+     anchor to their own zone rather than the page body. */
+  position: relative;
 }
 .zone.top    { grid-area: top;    justify-content: flex-start; }
 .zone.left   { grid-area: left;   justify-content: center; }
@@ -104,7 +107,7 @@ body {
   filter: drop-shadow(0 0 18px rgba(232,146,122,0.65));
 }
 
-.player-info { display: flex; align-items: center; gap: 7px; }
+.player-info { display: flex; align-items: center; gap: 7px; position: relative; }
 .player-name {
   font-size: 0.78rem;
   font-weight: 800;
@@ -434,6 +437,38 @@ body {
   gap: 60px;
 }
 
+/* ── Drag-to-discard drop zone ────────────────────────────────
+   Absolute-positioned inside #zone-0 (which is `position: relative`) and
+   overflows upward into the #center grid cell. The result: the whole empty
+   region between the draw pile and the hand top edge is a valid discard
+   target. Invisible by default; a soft peach tint appears only on drag-over
+   so the player gets confirmation that the drop will land. pointer-events
+   stays "none" outside the discard phase so the zone never interferes with
+   other clicks on draw pile / side panels. */
+#discard-zone {
+  position: absolute;
+  left: 6%;
+  right: 6%;
+  bottom: 180px;   /* ~10px above the hand's top edge (hand top = 170 from zone bottom) */
+  height: 480px;   /* overflows upward into the center area, well past the dp-phoms-row */
+  z-index: 4;
+  pointer-events: none;
+  background: transparent;
+  border: 2px dashed transparent;
+  border-radius: 14px;
+  font-size: 0;
+  color: transparent;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+/* Activated only while the human is in the discard phase — pointer-events
+   flips on so the zone catches dragover/drop events. */
+#discard-zone.discard-mode {
+  pointer-events: auto;
+}
+/* Per request, the zone stays fully invisible even on drag-over. The .drag-over
+   class is still toggled by the JS (so future visual feedback could be added
+   here) but no visual effect is applied right now. */
+
 /* Each side panel holds one AI's dp-display (top) and laid-down phoms (below) */
 .side-panel {
   display: flex;
@@ -519,14 +554,19 @@ body {
 .btn-gui     { background: #D4A800; color: #fff; }
 
 /* ── Hand toolbar (auto-sort buttons) ────────────────────────
-   Quiet secondary buttons that live above the human's hand. Styled to feel
-   like utility controls rather than primary actions so they don't compete
-   with the action-bar's draw/discard/steal buttons. */
+   Quiet secondary buttons stacked vertically alongside the right edge of the
+   human's hand. Anchored to the zone's bottom-right so they sit at hand level
+   (above the player-info bar) regardless of the hand's exact card count.
+   Absolute positioning keeps them out of the flex column flow — otherwise
+   the 350px-tall bottom zone overflows and the player-info bar gets clipped. */
 .hand-toolbar {
+  position: absolute;
+  bottom: 60px;
+  right: 12px;
+  z-index: 5;
   display: flex;
-  gap: 8px;
-  justify-content: center;
-  margin: 4px 0 6px;
+  flex-direction: column;
+  gap: 6px;
 }
 .sort-btn {
   font-size: 0.62rem;
@@ -662,4 +702,240 @@ body {
   0%   { transform: translate(0, 0) scale(0) rotate(0);            opacity: 0; }
   15%  { transform: translate(0, 0) scale(1.2) rotate(180deg);     opacity: 1; }
   100% { transform: translate(var(--dx), var(--dy)) scale(0.5) rotate(720deg); opacity: 0; }
+}
+
+/* ── Ăn Chốt toast (per-player) ──────────────────────────────
+   Small yellow/gold pill that pops up next to the stealer's .player-info
+   when they steal a final (4th) discard. Direction-aware per zone so the
+   toast appears on the side that faces the center of the table. Quick pop-in
+   animation + ~1.5s linger + fade. pointer-events: none so it never blocks
+   clicks on the underlying card/avatar elements. */
+.an-chot-toast,
+.mom-toast,
+.gain-toast,
+.loss-toast {
+  position: absolute;
+  z-index: 200;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-weight: 800;
+  font-size: 0.78rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease, transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Ăn Chốt — yellow/gold pill for "you stole a final discard". */
+.an-chot-toast {
+  background: linear-gradient(135deg, #F5C518, #E8B500);
+  color: #1A4731;
+  box-shadow: 0 4px 14px rgba(245, 197, 24, 0.55), 0 0 0 3px rgba(255, 255, 255, 0.4);
+}
+
+/* Móm — dark slate pill for "you laid down zero phỏm and pay the penalty". */
+.mom-toast {
+  background: linear-gradient(135deg, #4B5563, #1F2937);
+  color: #FFFFFF;
+  box-shadow: 0 4px 14px rgba(75, 85, 99, 0.55), 0 0 0 3px rgba(255, 255, 255, 0.3);
+}
+
+/* Gain — green pill announcing a positive score change (e.g. Đền payments
+   credited to the Ù winner or T2 stealer). Slightly larger text so the
+   number reads at a glance. */
+.gain-toast {
+  background: linear-gradient(135deg, #10B981, #047857);
+  color: #FFFFFF;
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.55), 0 0 0 3px rgba(255, 255, 255, 0.4);
+  font-size: 0.85rem;
+}
+
+/* Loss — red pill announcing a negative score change (e.g. Đền-payer paying
+   the bill, T2 victim, etc.). Mirrors the .gain-toast shape so they pair
+   visually across the table. */
+.loss-toast {
+  background: linear-gradient(135deg, #DC2626, #991B1B);
+  color: #FFFFFF;
+  box-shadow: 0 4px 14px rgba(220, 38, 38, 0.55), 0 0 0 3px rgba(255, 255, 255, 0.4);
+  font-size: 0.85rem;
+}
+
+/* Default off-screen offset transforms — each zone overrides direction. */
+.zone.bottom .an-chot-toast,
+.zone.bottom .mom-toast,
+.zone.bottom .gain-toast,
+.zone.bottom .loss-toast { bottom: 100%; left: 50%; margin-bottom: 8px; transform: translate(-50%, 8px) scale(0.6); }
+.zone.top    .an-chot-toast,
+.zone.top    .mom-toast,
+.zone.top    .gain-toast,
+.zone.top    .loss-toast { top: 100%;    left: 50%; margin-top: 8px;    transform: translate(-50%, -8px) scale(0.6); }
+.zone.left   .an-chot-toast,
+.zone.left   .mom-toast,
+.zone.left   .gain-toast,
+.zone.left   .loss-toast { left: 100%;   top: 50%;  margin-left: 8px;   transform: translate(-8px, -50%) scale(0.6); }
+.zone.right  .an-chot-toast,
+.zone.right  .mom-toast,
+.zone.right  .gain-toast,
+.zone.right  .loss-toast { right: 100%;  top: 50%;  margin-right: 8px;  transform: translate(8px, -50%) scale(0.6); }
+
+/* show state — opacity to 1 and remove the offset/scale */
+.zone.bottom .an-chot-toast.show,
+.zone.bottom .mom-toast.show,
+.zone.bottom .gain-toast.show,
+.zone.bottom .loss-toast.show { opacity: 1; transform: translate(-50%, 0) scale(1); }
+.zone.top    .an-chot-toast.show,
+.zone.top    .mom-toast.show,
+.zone.top    .gain-toast.show,
+.zone.top    .loss-toast.show { opacity: 1; transform: translate(-50%, 0) scale(1); }
+.zone.left   .an-chot-toast.show,
+.zone.left   .mom-toast.show,
+.zone.left   .gain-toast.show,
+.zone.left   .loss-toast.show { opacity: 1; transform: translate(0, -50%) scale(1); }
+.zone.right  .an-chot-toast.show,
+.zone.right  .mom-toast.show,
+.zone.right  .gain-toast.show,
+.zone.right  .loss-toast.show { opacity: 1; transform: translate(0, -50%) scale(1); }
+
+/* ── Đền toast (center-screen, T1 / T3) ───────────────────────
+   Big deep-red banner that announces a Đền payment after a Ù involving an
+   ăn chốt event. Sits in the upper-center area so it doesn't fight the Ù
+   celebration card directly (which lives at vertical center). Pop-in scale
+   animation + ~2.5s linger + fade. */
+#den-toast {
+  position: fixed;
+  top: 22%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0.7);
+  z-index: 1100; /* above the Ù celebration (which is z-index 1000) */
+  background: linear-gradient(135deg, #B91C1C, #7F1D1D);
+  border: 3px solid rgba(255, 255, 255, 0.55);
+  border-radius: 16px;
+  padding: 18px 32px;
+  text-align: center;
+  box-shadow: 0 18px 60px rgba(127, 29, 29, 0.55), 0 0 80px rgba(220, 38, 38, 0.35);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  /* Hidden by default until JS injects content + adds .show class */
+  display: none;
+}
+#den-toast.show {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+  display: block;
+}
+.den-label {
+  font-size: 1.7rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  color: #FFFFFF;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  margin-bottom: 4px;
+}
+.den-detail {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.93);
+  letter-spacing: 0.03em;
+}
+
+/* ── Round-end recap modal ────────────────────────────────────
+   Center-screen card that shows each player's round score before it's
+   committed to the cumulative scoreboard at the top. The semi-transparent
+   backdrop dims everything else so the breakdown is the focus. User must
+   click "Add to Scoreboard" to dismiss — at which point the scoreboard
+   updates and the Next Round button appears. */
+.recap-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1050;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+.recap-overlay.show {
+  opacity: 1;
+  pointer-events: auto;
+}
+.recap-card {
+  background: linear-gradient(135deg, #FFF8F0, #F5F0E4);
+  padding: 28px 36px;
+  border-radius: 16px;
+  border: 3px solid #F5C518;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+  min-width: 380px;
+  max-width: 90vw;
+  text-align: center;
+  transform: scale(0.7);
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.recap-overlay.show .recap-card {
+  transform: scale(1);
+}
+.recap-title {
+  font-size: 1.4rem;
+  font-weight: 900;
+  color: #1A4731;
+  margin: 0 0 18px 0;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.recap-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 22px;
+}
+.recap-row {
+  display: grid;
+  grid-template-columns: 32px 1fr auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 14px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.5);
+  border: 2px solid transparent;
+}
+.recap-row.winner {
+  background: rgba(245, 197, 24, 0.22);
+  border-color: #F5C518;
+  box-shadow: 0 0 0 1px rgba(245, 197, 24, 0.3);
+}
+.recap-rank {
+  font-weight: 800;
+  color: #1A4731;
+  font-size: 1rem;
+  text-align: left;
+}
+.recap-name {
+  font-weight: 700;
+  color: #1A4731;
+  text-align: left;
+  font-size: 1rem;
+}
+.recap-tags {
+  font-size: 0.75rem;
+  color: rgba(26, 71, 49, 0.7);
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+.recap-score {
+  font-weight: 900;
+  font-size: 1.15rem;
+  min-width: 50px;
+  text-align: right;
+  color: #1A4731;
+}
+.recap-score.positive { color: #1A4731; }
+.recap-score.negative { color: #B91C1C; }
+.recap-btn {
+  /* Reuses .btn base styling; this just ensures it stretches a bit wider. */
+  padding: 8px 28px;
+  font-size: 0.82rem;
 }
