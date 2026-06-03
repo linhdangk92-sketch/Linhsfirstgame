@@ -12,7 +12,7 @@ function isSamCo(cards) {
 function isThong(cards) {
   if (cards.length < 3) return false;
   if (!cards.every(c => c.suit === cards[0].suit)) return false;
-  const orders = cards.map(c => RANK_ORDER[c.rank]).sort((a, b) => a - b);
+  const orders = cards.map(c => RANK_VALUE[c.rank]).sort((a, b) => a - b);
   for (let i = 1; i < orders.length; i++) {
     if (orders[i] !== orders[i - 1] + 1) return false;
   }
@@ -192,7 +192,7 @@ function isUKhan(hand) {
     for (let j = i + 1; j < hand.length; j++) {
       const a = hand[i], b = hand[j];
       if (a.rank === b.rank) return false;
-      if (a.suit === b.suit && Math.abs(RANK_ORDER[a.rank] - RANK_ORDER[b.rank]) <= 2)
+      if (a.suit === b.suit && Math.abs(RANK_VALUE[a.rank] - RANK_VALUE[b.rank]) <= 2)
         return false;
     }
   }

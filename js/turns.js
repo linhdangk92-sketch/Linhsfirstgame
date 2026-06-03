@@ -565,7 +565,7 @@ function aiBestDiscard(hand, difficulty, playerIdx) {
   for (let i = 0; i < hand.length; i++) {
     for (let j = i + 1; j < hand.length; j++) {
       const a   = hand[i], b = hand[j];
-      const dRk = Math.abs(RANK_ORDER[a.rank] - RANK_ORDER[b.rank]);
+      const dRk = Math.abs(RANK_VALUE[a.rank] - RANK_VALUE[b.rank]);
       const sameRank = a.rank === b.rank;
       const sameSuitNear = a.suit === b.suit && (dRk === 1 || dRk === 2);
       if (sameRank || sameSuitNear) { ownWeight[i]++; ownWeight[j]++; }

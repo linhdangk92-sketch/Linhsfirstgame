@@ -6,11 +6,14 @@ const RANKS     = ['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
 const SUITS     = ['♠','♣','♦','♥'];
 const RED_SUITS = new Set(['♦','♥']);
 
-/* Point value of each rank for rác (trash) penalty */
+/* Point value of each rank — used in two ways:
+   1. Rác (trash) penalty total at round end (sum of leftover hand cards)
+   2. Numeric ordering for thông validation + sort-by-rank
+   These were previously split into RANK_VALUE and RANK_ORDER (H2) but the
+   numbers are identical (A=1, K=13) so we keep one source of truth. If a
+   future rule ever wants A=14 for sequences but A=1 for value, the constants
+   can be split again. */
 const RANK_VALUE = {A:1,'2':2,'3':3,'4':4,'5':5,'6':6,'7':7,'8':8,'9':9,'10':10,J:11,Q:12,K:13};
-
-/* Numeric rank order for straight-flush validation */
-const RANK_ORDER = {A:1,'2':2,'3':3,'4':4,'5':5,'6':6,'7':7,'8':8,'9':9,'10':10,J:11,Q:12,K:13};
 
 /* Numeric suit order — used by the human hand's "Sort by Suit" button and as a
    tiebreaker when sorting by rank. Order matches the SUITS array above. */

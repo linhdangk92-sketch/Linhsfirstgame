@@ -57,7 +57,7 @@ Open `index.html` in a browser — no install or build step. The same file is wh
 - **Per-player lap-close** — each player closes their own lap when they hit 4 discards; the rotation keeps spinning so laid-down players take *extra turns* (optional steal → draw+discard if still <4 → gửi → otherwise pass)
 - **Gửi** — send rác cards to extend opponents' laid-down phỏm during the last lap (Móm players cannot gửi; they pay the full penalty)
 - **Đền (compensation) fully implemented** — T1, T2, T3 triggers with center-screen announcements and per-player payment toasts
-- **Responsive layout** for desktop, tablet, and large phone (smartphone-portrait <480px is in progress)
+- **Responsive layout** for desktop, tablet, and large phone (smartphone-portrait <480px is on the roadmap)
 
 ## Tech stack
 
@@ -96,4 +96,3 @@ Each JS file can only use globals defined in files above it in the load order.
 - **Smartphone-portrait layout (<480px)** — current responsive design covers desktop, tablet, and large phone; narrow phones need a vertical-stack redesign
 - **Hard AI: deeper opponent prediction** — track each opponent's discard pile (suits/ranks they don't want) and stolen cards (patterns they're building) to feed smarter discard choices
 - **Easy AI: occasional rookie behaviors** — sometimes skip a stealable card (didn't notice the phỏm)
-- **Consolidate `RANK_ORDER` / `RANK_VALUE`** — they currently hold identical data
