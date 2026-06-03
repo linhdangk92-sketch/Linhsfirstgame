@@ -169,6 +169,54 @@ function showStealDrawUI(canDoSteal, disc) {
   }, 1000);
 }
 
+/* A3-2/3: Hard-only opponent-hand inference. Returns a delta added to the
+   `oppWeight` of `card` in aiBestDiscard, based on what the NEXT player's
+   visible activity suggests about their hand.
+
+   Positive delta = riskier to discard (likely useful to them).
+   Negative delta = safer to discard (clearly not their target).
+
+   Signals:
+   • RISK: card sits 2 ranks from a same-suit endpoint of an opponent's
+     laid-down thông. The 1-rank extension is already covered by canGui
+     (in the existing oppWeight loop). The 2-rank-gap case is NOT covered
+     by canGui because [R1-2, R1, R2, R3] isn't a valid phỏm shape — but
+     opponent might hold the bridge card R1-1 and steal-then-form
+     [R1-2, R1-1, R1] as a new thông. (Steal-pattern inference, part 2.)
+   • SAFE: opponent dumped 2+ cards of this rank → unlikely to be collecting
+     sám cô of this rank.
+   • SAFE: opponent dumped 3+ cards in this suit → suit is "dead" for them;
+     stealing one more of this suit gains them little. (Discard-pile
+     inference, part 3.)
+
+   Only called when difficulty === 'hard'. Medium / Easy ignore inference —
+   that's how Hard AI feels meaningfully smarter than the others. */
+function inferOppInterest(card, nextPlayerIdx) {
+  const opp = state.players[nextPlayerIdx];
+  let delta = 0;
+
+  // RISK: bridge-extension of an existing thông (2-rank gap from endpoint)
+  opp.laidDown.forEach(group => {
+    if (group.length < 3) return;
+    if (!group.every(c => c.suit === card.suit)) return; // thông must match suit
+    const ranks  = group.map(c => RANK_VALUE[c.rank]).sort((a, b) => a - b);
+    const lo     = ranks[0];
+    const hi     = ranks[ranks.length - 1];
+    const myRank = RANK_VALUE[card.rank];
+    if (myRank === lo - 2 || myRank === hi + 2) delta += 1;
+  });
+
+  // SAFE: same-rank dumps in opponent's discard pile
+  const sameRankDumps = opp.discardPile.filter(c => c.rank === card.rank).length;
+  if (sameRankDumps >= 2) delta -= 1;
+
+  // SAFE: same-suit dumps in opponent's discard pile (suit "dead")
+  const sameSuitDumps = opp.discardPile.filter(c => c.suit === card.suit).length;
+  if (sameSuitDumps >= 3) delta -= 1;
+
+  return delta;
+}
+
 /* A3: Hard AI steal decision — should we actually accept this steal?
    The default flow always steals when canSteal returns true, but a stolen
    small-value phỏm forces a public lay-down (revealing structure to opponents)
@@ -522,10 +570,11 @@ function aiDiscard(playerIdx) {
   performDiscard(playerIdx, card);
 }
 
-/* Pick a card to discard, scored the same way for all difficulties; the only
-   level-specific behaviors are (1) whether opponent-feed avoidance is
-   considered, and (2) the probability of picking the top-scored card vs.
-   making a "mistake" (a random non-optimal pick).
+/* Pick a card to discard. Three difficulty-specific behaviors layer on top
+   of the shared scoring: (1) whether opponent-feed avoidance is considered
+   (Medium + Hard); (2) whether opponent-hand inference is considered
+   (Hard only — A3-2/3); (3) the probability of picking the top-scored card
+   vs. making a "mistake" (a random non-optimal pick).
 
    Scoring components per card in hand (A2: per-card WEIGHTS rather than
    binary flags — a card that participates in multiple potential phỏm is
@@ -588,6 +637,19 @@ function aiBestDiscard(hand, difficulty, playerIdx) {
       p.laidDown.forEach(group => {
         hand.forEach((card, i) => { if (canGui(card, group)) oppWeight[i]++; });
       });
+    });
+  }
+
+  // ─── Step 2b: A3-2/3 inference layer — Hard only ─────────────────
+  // Look at the NEXT player's laid-down phỏm and discard pile to detect
+  // steal-pattern signals (cards they're likely collecting) and dump
+  // signals (cards they've clearly abandoned). Adjust oppWeight up or down
+  // per card. The deltas are small (+1 risk, −1 safety each) so the
+  // existing canGui-based scoring still dominates; this is a refinement.
+  if (difficulty === 'hard' && playerIdx !== undefined) {
+    const nextPlayerIdx = (playerIdx + 1) % 4;
+    hand.forEach((card, i) => {
+      oppWeight[i] += inferOppInterest(card, nextPlayerIdx);
     });
   }
 
