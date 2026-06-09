@@ -179,9 +179,14 @@ function canPartitionIntoPhoms(cards) {
   return false;
 }
 
-/* Returns true if the player's hand can be fully partitioned into valid phỏm (Ù condition) */
+/* Returns true if the player's hand can be fully partitioned into valid phỏm (Ù condition).
+   An empty hand counts as Ù too — that case happens when a player has
+   gửi'd away their last remaining rác card during the extra-turn step.
+   Zero cards = zero rác, which is the Ù condition.
+   A hand of 1 or 2 cards can't form any phỏm and isn't Ù either. */
 function checkU(hand) {
-  if (hand.length < 3) return false;
+  if (hand.length === 0) return true;   // all rác sent away — Ù
+  if (hand.length < 3)   return false;  // 1 or 2 leftover cards can't form phỏm
   return canPartitionIntoPhoms(hand);
 }
 

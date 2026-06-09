@@ -125,6 +125,10 @@ if (_startOverlay) {
       setTimeout(() => _startOverlay.remove(), 400);
       // Tap the audio context awake so shuffle/deal sounds play on round 1.
       if (typeof ensureAudioContext === 'function') ensureAudioContext();
+      // Start the ambient background music loop now that we have a user
+      // gesture. No-op if the player has pre-emptively muted music via
+      // the 🎵 button.
+      if (typeof startMusic === 'function') startMusic();
       // If "First time" was checked, run the tutorial carousel first.
       // After the carousel closes, run the on-table practice round (with
       // its 3-step guided tour); the real round 1 deals once the practice
