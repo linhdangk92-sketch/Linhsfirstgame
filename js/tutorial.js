@@ -91,6 +91,26 @@ Three Đền triggers:
 
 Don't memorize this! The game will show clear banners explaining each Đền when it actually happens.`,
   },
+  {
+    title: 'Scoring summary',
+    body:
+`Scores update at round end based on the result:
+
+📊 Normal round (lowest rác wins):
+  1st place: +6
+  2nd: −1     3rd: −2     4th: −3
+  Móm penalty: extra −4 per Móm player (paid to the round winner)
+
+🎉 Ù / Ù Khan:
+  Winner: +15        Everyone else: −5
+
+⚡ Đền paths:
+  T1: stealer who Ăn Chốt'd pays −15 to the Ù-er; others 0
+  T2: triple-stealer "wins" +15, victim pays −15; others 0
+  T3: Ù-er wins +10, ăn-chốt victim refunded to 0, others −5
+
+🏆 Game winner = highest cumulative score after all rounds.`,
+  },
 ];
 
 /* The 9th slide has two variants: PRACTICE is appended when the tutorial
@@ -123,7 +143,8 @@ const TUTORIAL_SLIDE_TIPS = {
 🃏 Drag a card to the center to discard
 ↕️ Use the "Sort by Rank" / "Sort by Suit" buttons to organize your hand
 📖 Click the rule book in the header anytime to re-open this tutorial
-🔊 Mute toggle is in the top-right corner of the header
+🎵 Music toggle — turn the background loop on or off
+🔊 Sound effects toggle — mute card sounds, fanfares, etc.
 👁️ Hover over opponent piles to fan them out for a closer look
 
 Good luck!`,
