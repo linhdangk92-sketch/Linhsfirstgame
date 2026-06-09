@@ -16,6 +16,16 @@ function clearAllTimers() {
 
 /* Called at the start of every player's turn */
 function startTurn() {
+  // Tutorial practice round: once the human has discarded (step 3) and
+  // the turn advances to an AI, FREEZE — return before scheduling any
+  // AI think-pause setTimeout. Without this, the AI's queued runAiTurn
+  // would fire ~850ms later and (potentially) leak into the real round
+  // 1 that dealRound() starts when the user clicks "Start Real Game".
+  if (typeof TUTORIAL_PRACTICE_ACTIVE !== 'undefined'
+      && TUTORIAL_PRACTICE_ACTIVE
+      && !PLAYER_CFG[state.currentTurn].isHuman) {
+    return;
+  }
   clearAllTimers();
   clearStealable();
   state.stealHappenedThisTurn = false;
@@ -543,6 +553,12 @@ function advanceTurn() {
    phỏm may be skipped in favor of a fresh deck draw. Medium and Easy always
    accept any valid steal (unchanged). */
 function runAiTurn() {
+  // Belt-and-suspenders gate for tutorial practice mode. startTurn
+  // already prevents AI runAiTurn from being scheduled, but if any
+  // path manages to reach here during practice, bail out.
+  if (typeof TUTORIAL_PRACTICE_ACTIVE !== 'undefined' && TUTORIAL_PRACTICE_ACTIVE) {
+    return;
+  }
   const playerIdx = state.currentTurn;
   const player    = state.players[playerIdx];
   const cfg       = PLAYER_CFG[playerIdx];
@@ -695,6 +711,11 @@ function startExtraTurn() {
    Each branch routes through performSteal / performDraw / performDiscard,
    which all chain into afterDiscard → handleGuiStep → round-end check or advance. */
 function runAiExtraTurn() {
+  // Same tutorial-practice freeze as runAiTurn — no AI extra-turn
+  // activity while the practice round is wrapping up.
+  if (typeof TUTORIAL_PRACTICE_ACTIVE !== 'undefined' && TUTORIAL_PRACTICE_ACTIVE) {
+    return;
+  }
   const playerIdx = state.currentTurn;
   const player    = state.players[playerIdx];
   const cfg       = PLAYER_CFG[playerIdx];

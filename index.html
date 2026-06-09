@@ -20,6 +20,22 @@
     <p class="start-label">Your name (optional)</p>
     <input id="player-name-input" class="name-input"
            type="text" maxlength="12" placeholder="You" autocomplete="off">
+    <!-- Tutorial toggle — when checked, a 9-slide carousel opens after
+         the user picks a round count, explaining phỏm, turns, lay-down,
+         Móm, Ù, gửi, and Đền with example cards. Placed BEFORE the round
+         picker because clicking a round button starts the game immediately. -->
+    <label class="slow-play-toggle">
+      <input id="tutorial-input" type="checkbox">
+      <span>First time playing? Show me the tutorial</span>
+    </label>
+    <!-- S3: optional slow-play mode. When checked, the steal/draw 20s and
+         discard 60s timers are disabled so prompts wait for the click. -->
+    <label class="slow-play-toggle">
+      <input id="slow-play-input" type="checkbox">
+      <span>Slow play (no timers)</span>
+    </label>
+    <!-- Round picker comes LAST because clicking a number ends the start
+         overlay and begins the game. All other settings must be set first. -->
     <p class="start-label">How many rounds?</p>
     <div class="round-picker">
       <button class="round-btn" data-rounds="3"  type="button">3</button>
@@ -28,23 +44,31 @@
       <button class="round-btn" data-rounds="7"  type="button">7</button>
       <button class="round-btn" data-rounds="10" type="button">10</button>
     </div>
-    <!-- S3: optional slow-play mode. When checked, the steal/draw 20s and
-         discard 60s timers are disabled so prompts wait for the click. -->
-    <label class="slow-play-toggle">
-      <input id="slow-play-input" type="checkbox">
-      <span>Slow play (no timers)</span>
-    </label>
   </div>
 </div>
 
-<!-- ── Header ────────────────────────────────────────────────── -->
+<!-- ── Header ──────────────────────────────────────────────────
+     Three-column grid: title left, scoreboard at exact center,
+     round-badge + icons on the right edge. The center column is
+     auto-sized while the left + right columns each take 1fr, so the
+     scoreboard sits at the true middle of the bar regardless of
+     left/right content widths. -->
 <div id="header">
-  <h1>Phỏm · Tá Lả</h1>
-  <div id="scoreboard"></div>
-  <div class="round-badge" id="round-badge">Round 1 of 4</div>
-  <!-- P4: mute toggle. Clicking also satisfies the autoplay-gesture
-       requirement so audio unlocks immediately. -->
-  <button id="mute-btn" class="mute-btn" type="button" title="Sound on — click to mute">🔊</button>
+  <div class="header-left">
+    <h1>Phỏm · Tá Lả</h1>
+  </div>
+  <div class="header-center">
+    <div id="scoreboard"></div>
+  </div>
+  <div class="header-right">
+    <div class="round-badge" id="round-badge">Round 1 of 4</div>
+    <!-- Rule book — re-opens the tutorial carousel in read-only mode so the
+         player can refresh themselves on the rules at any time. -->
+    <button id="rulebook-btn" class="mute-btn" type="button" title="Rule book — open tutorial">📖</button>
+    <!-- P4: mute toggle. Clicking also satisfies the autoplay-gesture
+         requirement so audio unlocks immediately. -->
+    <button id="mute-btn" class="mute-btn" type="button" title="Sound on — click to mute">🔊</button>
+  </div>
 </div>
 
 <!-- ── Game table ─────────────────────────────────────────────── -->
@@ -183,6 +207,7 @@
 <script src="js/turns.js"></script>
 <script src="js/laydown.js"></script>
 <script src="js/scoring.js"></script>
+<script src="js/tutorial.js"></script>
 <script src="js/main.js"></script>
 
 </body>

@@ -34,6 +34,7 @@ Before each game the start overlay lets you:
 - **Type your name** (optional — defaults to "You", 12 chars max)
 - **Pick the number of rounds** — 3, 4, 5, 7, or 10
 - **Toggle Slow play** — turns off the 20s steal/draw timer and 60s discard timer so you can take all the time you want
+- **Toggle "First time playing?"** — if checked, a 9-slide tutorial carousel opens before the game starts, covering phỏm types, the turn flow, lay-down rule, Móm, Ù, gửi, and Đền (with example cards on the phỏm slide). Skippable at any step.
 
 Settings persist across "Play Again". Refresh the page to change them.
 

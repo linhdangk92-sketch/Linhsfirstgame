@@ -6,7 +6,7 @@
    Round 1: human (player 0) is always dealer.
    Round 2+: the winner of the previous round deals.
    The dealer receives 10 cards and plays first; everyone else gets 9. */
-function dealRound() {
+function dealRound(dealerOverride = null) {
   // Pick new AI names and update avatars at the start of each game.
   // S2: preserve any custom human name across "Play Again" by re-applying it
   // after buildPlayerCfg (which always resets the human slot to 'You').
@@ -53,8 +53,12 @@ function dealRound() {
   state.pendingT2        = null;
   state.lapCloseCounter  = 0;
 
-  // Dealer = winner of previous round; P0 for round 1.
-  const dealerIdx = state.roundNumber === 1 ? 0 : state.lastWinnerIdx;
+  // Dealer = winner of previous round; P0 for round 1. The tutorial
+  // practice round overrides this to player 3 so an AI plays first and
+  // creates a discard pile for the tour's hover step.
+  const dealerIdx = dealerOverride !== null
+    ? dealerOverride
+    : (state.roundNumber === 1 ? 0 : state.lastWinnerIdx);
 
   state.lastDiscard           = null;
   state.phase                 = 'playing';
@@ -99,6 +103,7 @@ if (_startOverlay) {
   const roundBtns = _startOverlay.querySelectorAll('.round-btn');
   const nameInput = document.getElementById('player-name-input');
   const slowInput = document.getElementById('slow-play-input');
+  const tutInput  = document.getElementById('tutorial-input');
   let started = false; // guard against double-clicks during the 400ms fade
   roundBtns.forEach(btn => {
     btn.addEventListener('click', () => {
@@ -115,14 +120,42 @@ if (_startOverlay) {
       // S3: capture the slow-play preference. turns.js checks SLOW_PLAY when
       // deciding whether to start the steal/draw and discard timers.
       SLOW_PLAY = !!(slowInput && slowInput.checked);
+      const showTut = !!(tutInput && tutInput.checked);
       _startOverlay.classList.add('dismissed');
       setTimeout(() => _startOverlay.remove(), 400);
       // Tap the audio context awake so shuffle/deal sounds play on round 1.
       if (typeof ensureAudioContext === 'function') ensureAudioContext();
-      dealRound();
+      // If "First time" was checked, run the tutorial carousel first.
+      // After the carousel closes, run the on-table practice round (with
+      // its 3-step guided tour); the real round 1 deals once the practice
+      // is done. If "First time" wasn't checked, deal round 1 immediately.
+      if (showTut && typeof showTutorial === 'function') {
+        showTutorial(() => {
+          if (typeof startPracticeRound === 'function') {
+            startPracticeRound();
+          } else {
+            dealRound();
+          }
+        });
+      } else {
+        dealRound();
+      }
     });
   });
 } else {
   // Fallback in case the overlay element was removed
   dealRound();
+}
+
+// Rule-book button in the header — re-opens the tutorial carousel in
+// read-only mode (last slide is "You're ready!" tips, last button is
+// just "Close"). Safe to click anytime; the modal floats above the
+// game with no state side-effects.
+const _rulebookBtn = document.getElementById('rulebook-btn');
+if (_rulebookBtn) {
+  _rulebookBtn.addEventListener('click', () => {
+    if (typeof showTutorial === 'function') {
+      showTutorial(null, { readonly: true });
+    }
+  });
 }
