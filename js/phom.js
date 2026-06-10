@@ -44,18 +44,19 @@ function canSteal(card, hand) {
   return false;
 }
 
-/* Returns every distinct valid phỏm configuration that includes `card` plus 2 or 3 cards
-   from `hand`. Used after a successful steal — the player must lay down ONE of these.
-   May return multiple options when the stolen card fits more than one possible phỏm. */
+/* Returns every distinct valid phỏm configuration that includes `card` plus 2+
+   cards from `hand`. Used after a successful steal — the player must lay down
+   ONE of these. May return multiple options when the stolen card fits more
+   than one possible phỏm. Sizes covered: 3 up to hand.length+1 (capped at 13)
+   so a stolen card that completes a 5- or 6-card thông gives the player the
+   full-length lay-down option, not just smaller subsets. */
 function findStealPhoms(card, hand) {
   const groups = [];
-  // 3-card phỏm: stolen card + 2 from hand
-  for (const combo of combinations(hand, 2)) {
-    if (isValidPhom([card, ...combo])) groups.push([card, ...combo]);
-  }
-  // 4-card phỏm: stolen card + 3 from hand
-  for (const combo of combinations(hand, 3)) {
-    if (isValidPhom([card, ...combo])) groups.push([card, ...combo]);
+  const maxGroupSize = Math.min(hand.length + 1, 13);
+  for (let size = 3; size <= maxGroupSize; size++) {
+    for (const combo of combinations(hand, size - 1)) {
+      if (isValidPhom([card, ...combo])) groups.push([card, ...combo]);
+    }
   }
   return groups;
 }
@@ -134,17 +135,14 @@ function findAllBestPhoms(hand) {
     const first = remaining[0];
     const rest  = remaining.slice(1);
 
-    if (rest.length >= 3) {
-      for (const combo of combinations(rest, 3)) {
-        const group = [first, ...combo];
-        if (isValidPhom(group)) {
-          const next = rest.filter(c => !combo.includes(c));
-          search(next, racSoFar, [...groups, group]);
-        }
-      }
-    }
-    if (rest.length >= 2) {
-      for (const combo of combinations(rest, 2)) {
+    /* Try every possible phỏm size from 3 up to the remaining cards
+       count, capped at 13 (max possible thông spans A→K in one suit;
+       sám cô caps naturally at 4 since there are 4 of each rank). The
+       previous code only tried sizes 3 and 4, which silently downgraded
+       a 5-card thông like 7♠8♠9♠10♠J♠ into a 4-card thông + 1 rác. */
+    const maxGroupSize = Math.min(rest.length + 1, 13);
+    for (let size = 3; size <= maxGroupSize; size++) {
+      for (const combo of combinations(rest, size - 1)) {
         const group = [first, ...combo];
         if (isValidPhom(group)) {
           const next = rest.filter(c => !combo.includes(c));
@@ -169,7 +167,11 @@ function canPartitionIntoPhoms(cards) {
   if (cards.length === 0) return true;
   if (cards.length < 3)   return false;
   const [first, ...rest] = cards;
-  for (const size of [3, 4]) {
+  /* Try every possible phỏm size from 3 up to the remaining cards count
+     (capped at 13). Previously only tried sizes 3 and 4, which missed
+     Ù detection on hands like a clean 5-card thông or larger. */
+  const maxGroupSize = Math.min(cards.length, 13);
+  for (let size = 3; size <= maxGroupSize; size++) {
     for (const combo of combinations(rest, size - 1)) {
       const group     = [first, ...combo];
       const remaining = rest.filter(c => !combo.includes(c));
