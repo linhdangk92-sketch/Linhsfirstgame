@@ -7,6 +7,13 @@
    Round 2+: the winner of the previous round deals.
    The dealer receives 10 cards and plays first; everyone else gets 9. */
 function dealRound(dealerOverride = null) {
+  // Switch the background music to this round's song (rotates through
+  // SONGS[0..2] modulo state.roundNumber). The currently playing verse
+  // finishes its already-scheduled notes, then the new song's verse A
+  // takes over on the next loop iteration — smooth transition.
+  if (typeof setSongForRound === 'function') {
+    setSongForRound(state.roundNumber);
+  }
   // Pick new AI names and update avatars at the start of each game.
   // S2: preserve any custom human name across "Play Again" by re-applying it
   // after buildPlayerCfg (which always resets the human slot to 'You').
