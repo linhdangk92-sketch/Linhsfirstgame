@@ -5,6 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Phỏm · Tá Lả</title>
   <link rel="stylesheet" href="style.css">
+
+  <!-- Firebase SDK (compat) — loaded from Google's CDN, no npm needed.
+       Powers the multiplayer lobby + game-state sync. The compat API
+       gives us a `firebase` global so our plain-script JS files can use
+       it without ES module syntax. -->
+  <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-database-compat.js"></script>
 </head>
 <body>
 
@@ -34,15 +41,68 @@
       <input id="slow-play-input" type="checkbox">
       <span>Slow play (no timers)</span>
     </label>
+    <!-- Mode selector — Solo (vs AI, default) or Multiplayer (Firebase
+         lobby + sync). In Solo mode, the round picker starts the game
+         immediately. In Multiplayer mode, the round picker becomes
+         "Host a new game with N rounds" and a Join section appears
+         below for entering a friend's room code. -->
+    <p class="start-label">Mode</p>
+    <div class="mode-picker">
+      <button class="mode-btn active" data-mode="solo"  type="button">👤 Solo</button>
+      <button class="mode-btn"        data-mode="multi" type="button">👥 Multiplayer</button>
+    </div>
+
     <!-- Round picker comes LAST because clicking a number ends the start
-         overlay and begins the game. All other settings must be set first. -->
-    <p class="start-label">How many rounds?</p>
+         overlay and begins the game. All other settings must be set first.
+         In Multiplayer mode, the label changes to "Host a game with N rounds". -->
+    <p class="start-label" id="round-label">How many rounds?</p>
     <div class="round-picker">
       <button class="round-btn" data-rounds="3"  type="button">3</button>
       <button class="round-btn" data-rounds="4"  type="button">4</button>
       <button class="round-btn" data-rounds="5"  type="button">5</button>
       <button class="round-btn" data-rounds="7"  type="button">7</button>
       <button class="round-btn" data-rounds="10" type="button">10</button>
+    </div>
+
+    <!-- Multiplayer-only Join section, hidden by default. Shown when the
+         user picks Multiplayer mode. Enter a friend's 6-character room
+         code to join their game instead of creating a new one. -->
+    <div id="multi-join-section" style="display: none;">
+      <p class="start-label">Or join a friend's game</p>
+      <div class="join-row">
+        <input id="join-code-input" class="name-input join-code-input"
+               type="text" maxlength="6" placeholder="ABC123" autocomplete="off">
+        <button id="join-game-btn" class="round-btn" type="button">Join</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Multiplayer lobby modal ─────────────────────────────────
+     Appears after the host creates a game OR a guest joins one. Shows
+     the room code (with copy button), the live list of joined players
+     plus empty seats (will be filled by AI when the host starts), and
+     Start / Leave buttons. Real-time updates via Firebase listener:
+     when anyone joins or leaves, the player list refreshes for everyone. -->
+<div id="lobby-modal" class="lobby-overlay">
+  <div class="lobby-card">
+    <h2 class="lobby-title">Lobby</h2>
+    <div class="lobby-code-section">
+      <div class="lobby-code-label">Room code</div>
+      <div class="lobby-code-row">
+        <div class="lobby-code-value" id="lobby-room-code">------</div>
+        <button class="lobby-copy-btn" id="lobby-copy-btn" type="button">📋 Copy</button>
+      </div>
+      <p class="lobby-share-hint">Share this code with friends to invite them</p>
+    </div>
+    <div class="lobby-players-section">
+      <div class="lobby-players-label">Players</div>
+      <div class="lobby-player-list" id="lobby-player-list"></div>
+      <p class="lobby-ai-hint">Empty seats will be filled by AI when you start</p>
+    </div>
+    <div class="lobby-buttons">
+      <button id="lobby-leave-btn" class="lobby-btn cancel" type="button">Leave</button>
+      <button id="lobby-start-btn" class="lobby-btn start" type="button">Start Game</button>
     </div>
   </div>
 </div>
@@ -211,6 +271,10 @@
 <script src="js/laydown.js"></script>
 <script src="js/scoring.js"></script>
 <script src="js/tutorial.js"></script>
+<!-- Multiplayer scripts — firebase-config.js initializes the SDK +
+     exposes _firebaseDB, then multiplayer.js wires the lobby flow. -->
+<script src="js/firebase-config.js"></script>
+<script src="js/multiplayer.js"></script>
 <script src="js/main.js"></script>
 
 </body>

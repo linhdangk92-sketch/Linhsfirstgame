@@ -107,11 +107,48 @@ function dealRound(dealerOverride = null) {
 // would be silently dropped.
 const _startOverlay = document.getElementById('start-overlay');
 if (_startOverlay) {
-  const roundBtns = _startOverlay.querySelectorAll('.round-btn');
+  // Require [data-rounds] so the Join button (which also has class
+  // "round-btn" for styling) isn't picked up by this query — otherwise
+  // clicking Join would also fire the round handler and try to create
+  // a game with parseInt(undefined) === NaN.
+  const roundBtns = _startOverlay.querySelectorAll('.round-btn[data-rounds]');
   const nameInput = document.getElementById('player-name-input');
   const slowInput = document.getElementById('slow-play-input');
   const tutInput  = document.getElementById('tutorial-input');
+  const modeBtns  = _startOverlay.querySelectorAll('.mode-btn');
+  const joinSection = document.getElementById('multi-join-section');
+  const joinInput   = document.getElementById('join-code-input');
+  const joinBtn     = document.getElementById('join-game-btn');
+  const roundLabel  = document.getElementById('round-label');
   let started = false; // guard against double-clicks during the 400ms fade
+  let currentMode = 'solo';
+
+  // ── Mode selector wiring ─────────────────────────────────────
+  // Toggling between Solo and Multiplayer reveals/hides the Join
+  // section and changes the round picker's label so the user knows
+  // whether clicking a number starts a solo game or hosts a multiplayer
+  // one. The Tutorial + Slow-play checkboxes only affect Solo mode.
+  modeBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      currentMode = btn.dataset.mode;
+      modeBtns.forEach(b => b.classList.toggle('active', b === btn));
+      if (currentMode === 'multi') {
+        joinSection.style.display = '';
+        roundLabel.textContent = 'Host a game (choose round count):';
+      } else {
+        joinSection.style.display = 'none';
+        roundLabel.textContent = 'How many rounds?';
+      }
+    });
+  });
+
+  // Helper — pull the user's typed name (with the 'You' default). Used
+  // by both round-button (solo + host) and join-button click paths.
+  const readName = () => {
+    const t = (nameInput && nameInput.value || '').trim();
+    return t || 'You';
+  };
+
   roundBtns.forEach(btn => {
     btn.addEventListener('click', () => {
       if (started) return;
@@ -122,8 +159,8 @@ if (_startOverlay) {
       // S2: trim + fall back to 'You' if blank. Browser caps length at 12 via
       // the maxlength attribute. textContent (used in the render path) escapes
       // any HTML the user types, so no XSS risk.
-      const typedName = (nameInput && nameInput.value || '').trim();
-      if (typedName) PLAYER_CFG[0].name = typedName;
+      const typedName = readName();
+      if (typedName !== 'You') PLAYER_CFG[0].name = typedName;
       // S3: capture the slow-play preference. turns.js checks SLOW_PLAY when
       // deciding whether to start the steal/draw and discard timers.
       SLOW_PLAY = !!(slowInput && slowInput.checked);
@@ -136,10 +173,18 @@ if (_startOverlay) {
       // gesture. No-op if the player has pre-emptively muted music via
       // the 🎵 button.
       if (typeof startMusic === 'function') startMusic();
-      // If "First time" was checked, run the tutorial carousel first.
-      // After the carousel closes, run the on-table practice round (with
-      // its 3-step guided tour); the real round 1 deals once the practice
-      // is done. If "First time" wasn't checked, deal round 1 immediately.
+
+      // Multiplayer branch: round button click = "host a new game with
+      // this many rounds". Lobby modal opens for friends to join. The
+      // tutorial flow is solo-only; skipped here.
+      if (currentMode === 'multi') {
+        if (typeof createGame === 'function') {
+          createGame(typedName, TOTAL_ROUNDS);
+        }
+        return;
+      }
+
+      // Solo branch (unchanged): optional tutorial → practice → round 1.
       if (showTut && typeof showTutorial === 'function') {
         showTutorial(() => {
           if (typeof startPracticeRound === 'function') {
@@ -153,6 +198,35 @@ if (_startOverlay) {
       }
     });
   });
+
+  // ── Join button ─────────────────────────────────────────────
+  // Reads the 6-character room code, calls joinGame which opens the
+  // lobby modal on success or shows an alert + lets the user retry on
+  // failure. Mirrors the round-button setup of audio / name handling
+  // so the experience matches.
+  if (joinBtn) {
+    joinBtn.addEventListener('click', async () => {
+      if (started) return;
+      const code = (joinInput.value || '').trim().toUpperCase();
+      if (!code || code.length !== 6) {
+        alert('Please enter a 6-character room code (the host shares it with you).');
+        return;
+      }
+      started = true;
+      const typedName = readName();
+      if (typedName !== 'You') PLAYER_CFG[0].name = typedName;
+      if (typeof ensureAudioContext === 'function') ensureAudioContext();
+      if (typeof startMusic === 'function') startMusic();
+
+      const success = await joinGame(code, typedName);
+      if (success) {
+        _startOverlay.classList.add('dismissed');
+        setTimeout(() => _startOverlay.remove(), 400);
+      } else {
+        started = false; // allow another attempt with a different code
+      }
+    });
+  }
 } else {
   // Fallback in case the overlay element was removed
   dealRound();
