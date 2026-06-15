@@ -17,7 +17,11 @@ function dealRound(dealerOverride = null) {
   // Pick new AI names and update avatars at the start of each game.
   // S2: preserve any custom human name across "Play Again" by re-applying it
   // after buildPlayerCfg (which always resets the human slot to 'You').
-  if (state.roundNumber === 1) {
+  // Multiplayer: PLAYER_CFG was already built in transitionToMultiplayerGame
+  // (humans from the lobby + AI fill) and the DOM was updated by
+  // applyPlayerCfgToDom. Skip the round-1 reset so we don't clobber it.
+  if (state.roundNumber === 1
+      && !(typeof IS_MULTIPLAYER_GAME !== 'undefined' && IS_MULTIPLAYER_GAME)) {
     const previousHumanName = PLAYER_CFG[0] && PLAYER_CFG[0].name;
     PLAYER_CFG = buildPlayerCfg();
     if (previousHumanName && previousHumanName !== 'You') {
@@ -96,6 +100,14 @@ function dealRound(dealerOverride = null) {
      happens per-player at the start of THEIR first turn (in startTurn). */
   animateDeal(dealerIdx).then(() => {
     setStatus('Round ' + state.roundNumber + ' · ' + dealerLabel);
+    // Multiplayer: publish state after the deal animation completes so
+    // guests don't see cards appear during the host's animation.
+    // The Firebase listener then fires driveTurn on every browser,
+    // which calls startTurn on the active player's browser only.
+    if (typeof IS_MULTIPLAYER_GAME !== 'undefined' && IS_MULTIPLAYER_GAME) {
+      if (typeof publishGameStateAsync === 'function') publishGameStateAsync();
+      return;
+    }
     setTimeout(() => startTurn(), 400);
   });
 }

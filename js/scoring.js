@@ -177,6 +177,10 @@ function declareU(playerIdx, isKhan = false) {
   state.denLiable       = null;
 
   state.lastWinnerIdx = playerIdx;
+  state.phase = 'scoring';
+  // Multiplayer: publish Ù state so guests see the cumScore updates and
+  // revealed hands sync. Recap modal stays host-only in Session 2.
+  if (typeof publishGameStateAsync === 'function') publishGameStateAsync();
 
   setStatus(name + ' wins with ' + label + '!');
 
@@ -264,6 +268,9 @@ function declareTriggerTwo(stealerIdx, victimIdx) {
 
   // Stealer (who "Ù'd") deals the next round
   state.lastWinnerIdx = stealerIdx;
+  state.phase = 'scoring';
+  // Multiplayer: publish T2 outcome (revealed hands + score deltas).
+  if (typeof publishGameStateAsync === 'function') publishGameStateAsync();
 
   setStatus('⚡ Đền T2!  ' + stealerName + ' (considered Ù)');
 
@@ -366,6 +373,11 @@ function endRound() {
   });
 
   state.lastWinnerIdx = winnerIdx;
+  state.phase = 'scoring';
+  // Multiplayer: publish so guests see round-end state (revealed hands,
+  // updated cumScores). Their browsers won't show the recap modal in
+  // Session 2 — that's a host-only UI.
+  if (typeof publishGameStateAsync === 'function') publishGameStateAsync();
 
   // Status bar gets the textual summary (always visible behind the modal).
   // Móm players show "Nth Móm" (rác doesn't determine their position so

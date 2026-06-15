@@ -16,6 +16,8 @@ function lockInPhoms(playerIdx, groups) {
     player.laidDown.push(group);
   });
   if (groups.length > 0) player.isMom = false;
+  // Multiplayer: publish so spectators see the lay-down appear.
+  if (typeof publishGameStateAsync === 'function') publishGameStateAsync();
 }
 
 // ── Lay-down on Steal (B2) ────────────────────────────────────────
@@ -226,6 +228,9 @@ function applyGui(playerIdx, card, targetIdx, groupIdx) {
   const i    = hand.indexOf(card);
   if (i !== -1) hand.splice(i, 1);
   state.players[targetIdx].laidDown[groupIdx].push(card);
+
+  // Multiplayer: publish so spectators see the gửi land in real time.
+  if (typeof publishGameStateAsync === 'function') publishGameStateAsync();
 
   // B7: hand composition changed — check Ù.
   return checkAndHandleU(playerIdx);

@@ -26,6 +26,16 @@ function startTurn() {
       && !PLAYER_CFG[state.currentTurn].isHuman) {
     return;
   }
+  // Multiplayer gate: only the active human (or host for AI) drives the
+  // turn. Other browsers just spectate the rendered state — they'll get
+  // the next state update via the Firebase listener when this turn ends.
+  if (typeof IS_MULTIPLAYER_GAME !== 'undefined' && IS_MULTIPLAYER_GAME) {
+    const cfg = PLAYER_CFG[state.currentTurn];
+    const shouldDrive = cfg.isHuman
+      ? state.currentTurn === MY_ABSOLUTE_SEAT
+      : _mpIsHost;
+    if (!shouldDrive) return;
+  }
   clearAllTimers();
   clearStealable();
   state.stealHappenedThisTurn = false;
@@ -370,6 +380,8 @@ function performSteal(playerIdx) {
             anChotTag + tripleTag);
   state.phase = 'playing';
   renderAll();
+  // Multiplayer: publish so spectators see the steal land in real time.
+  if (typeof publishGameStateAsync === 'function') publishGameStateAsync();
 
   // P4: rising-sweep "swipe" sound for the steal
   soundSteal();
@@ -429,6 +441,9 @@ function performDraw(playerIdx) {
   }
   state.phase = 'playing';
   renderAll();
+  // Multiplayer: publish so spectators see the draw pile shrink and
+  // the drawer's hand grow (face-down to them).
+  if (typeof publishGameStateAsync === 'function') publishGameStateAsync();
 
   if (checkAndHandleU(playerIdx)) return; // Ù — round ends, no discard needed
 
@@ -530,6 +545,10 @@ function performDiscard(playerIdx, card) {
   // B7: if this discard was the last rác, the remaining hand is pure phỏm — Ù.
   if (checkAndHandleU(playerIdx)) return;
 
+  // Multiplayer: publish the discard so spectators see it animate.
+  // The actual turn-advance publish happens later inside advanceTurn.
+  if (typeof publishGameStateAsync === 'function') publishGameStateAsync();
+
   // afterDiscard() checks for round-end cascade and optional lay-down
   setTimeout(() => afterDiscard(playerIdx), 420);
 }
@@ -539,6 +558,13 @@ function performDiscard(playerIdx, card) {
 /* Move clockwise to the next player and start their turn */
 function advanceTurn() {
   state.currentTurn = (state.currentTurn + 1) % 4;
+  // Multiplayer: publish the turn change, then the state listener on
+  // every browser fires driveTurn which calls startTurn on the right
+  // one. Skip the local startTurn here — the listener will trigger it.
+  if (typeof IS_MULTIPLAYER_GAME !== 'undefined' && IS_MULTIPLAYER_GAME) {
+    if (typeof publishGameStateAsync === 'function') publishGameStateAsync();
+    return;
+  }
   startTurn();
 }
 
