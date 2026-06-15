@@ -552,21 +552,30 @@ function setupLocalView() {
     return wrap;
   }
 
-  // 1. Detach every dp + phoms from their current parents (zone or center
-  //    side-panel) so we can re-place each in its correct container based
-  //    on its LOCAL position relative to MY_ABSOLUTE_SEAT.
+  // 1. Save references to every dp + phoms BEFORE detaching them.
+  //    Once we remove them from the DOM, getElementById would return
+  //    null on the subsequent loop and we'd silently skip every seat.
+  const dpEls    = {};
+  const phomsEls = {};
   for (let abs = 0; abs < 4; abs++) {
-    const dp    = document.getElementById('dp-' + abs);
-    const phoms = document.getElementById('phoms-' + abs);
+    dpEls[abs]    = document.getElementById('dp-'    + abs);
+    phomsEls[abs] = document.getElementById('phoms-' + abs);
+  }
+
+  // 2. Detach every dp + phoms from their current parents so we can
+  //    re-place each in its correct container.
+  for (let abs = 0; abs < 4; abs++) {
+    const dp    = dpEls[abs];
+    const phoms = phomsEls[abs];
     if (dp    && dp.parentNode)    dp.parentNode.removeChild(dp);
     if (phoms && phoms.parentNode) phoms.parentNode.removeChild(phoms);
   }
-  // Wipe the empty dp-phoms-row wrappers + side-panel wrappers we just
-  // emptied so we can rebuild cleanly.
+  // Wipe the empty dp-phoms-row + side-panel wrappers so we can rebuild
+  // cleanly without leftover empty containers.
   document.querySelectorAll('.dp-phoms-row').forEach(r => r.remove());
   document.querySelectorAll('#center .side-panel').forEach(p => p.remove());
 
-  // 2. Place each dp + phoms based on its LOCAL position.
+  // 3. Place each dp + phoms based on its LOCAL position.
   //    Local 0 (bottom) and 2 (top): inline dp-phoms-row inside the zone.
   //    Local 1 (left) and 3 (right): #center side-panel.
   //    This mirrors the original solo layout exactly — keeps left/right
@@ -574,8 +583,8 @@ function setupLocalView() {
   const pile = center.querySelector('.pile-wrap');
   for (let abs = 0; abs < 4; abs++) {
     const local = (abs - MY_ABSOLUTE_SEAT + 4) % 4;
-    const dp    = document.getElementById('dp-' + abs);
-    const phoms = document.getElementById('phoms-' + abs);
+    const dp    = dpEls[abs];
+    const phoms = phomsEls[abs];
     if (!dp || !phoms) continue;
 
     if (local === 0 || local === 2) {
