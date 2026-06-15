@@ -133,10 +133,16 @@ body {
      anchor to their own zone rather than the page body. */
   position: relative;
 }
-.zone.top    { grid-area: top;    justify-content: flex-start; }
+.zone.top    { grid-area: top;    justify-content: flex-start; z-index: 3; }
 .zone.left   { grid-area: left;   justify-content: center; }
 .zone.right  { grid-area: right;  justify-content: center; }
-.zone.bottom { grid-area: bottom; justify-content: flex-start; }
+.zone.bottom { grid-area: bottom; justify-content: flex-start; z-index: 3; }
+
+/* Without these z-index lifts, the multiplayer DOM-rotation puts the
+   local-bottom zone (containing #action-bar / Steal button) and the
+   local-top zone (containing the opponent's discard pile) BEFORE
+   #center in DOM order — so #center's draw-pile would stack on top.
+   z-index: 3 lifts both above #center (which has no z-index, default 0). */
 
 /* Active player pops — slightly bigger with a warm glow */
 .zone.is-active {
