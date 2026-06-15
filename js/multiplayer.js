@@ -314,7 +314,10 @@ function serializeGameState() {
 }
 
 // Apply a Firebase-received state snapshot into the live `state`.
-// Firebase converts empty arrays to null on read, so we coerce back.
+// Firebase converts empty arrays to null on read, and CAN convert any
+// array to an object-with-numeric-keys (especially when there are gaps
+// from in-flight operations). asArray normalizes both cases back to
+// a proper JS array so .pop() / .push() / .forEach() behave correctly.
 function applyGameState(s) {
   if (!s) return;
   state.roundNumber     = s.roundNumber;
@@ -329,15 +332,14 @@ function applyGameState(s) {
   state.lapCloseCounter = s.lapCloseCounter || 0;
   state.lastWinnerIdx   = s.lastWinnerIdx || 0;
   state.stealHappenedThisTurn = !!s.stealHappenedThisTurn;
-  state.drawPile        = s.drawPile || [];
+  state.drawPile        = asArray(s.drawPile);
   (s.players || []).forEach((sp, i) => {
     const p = state.players[i];
     if (!p || !sp) return;
-    p.hand         = sp.hand        || [];
-    // laidDown is an array of arrays — handle the case where Firebase
-    // stored it as an object with numeric keys (happens for sparse arrays).
-    p.laidDown     = Array.isArray(sp.laidDown) ? sp.laidDown : Object.values(sp.laidDown || {});
-    p.discardPile  = sp.discardPile || [];
+    p.hand         = asArray(sp.hand);
+    // laidDown is an array of arrays — normalize both levels.
+    p.laidDown     = asArray(sp.laidDown).map(g => asArray(g));
+    p.discardPile  = asArray(sp.discardPile);
     p.discardCount = sp.discardCount || 0;
     p.roundScore   = sp.roundScore || 0;
     p.cumScore     = sp.cumScore || 0;
@@ -347,6 +349,51 @@ function applyGameState(s) {
     p.stolenStreak = sp.stolenStreak || 0;
     p.firstTurn    = !!sp.firstTurn;
   });
+  // Diagnostic — if cards are missing or duplicated, log loudly so we
+  // can paste the report when reproducing weird in-game bugs.
+  checkDeckIntegrity('after applyGameState');
+}
+
+// Coerce a Firebase value to a JS array.
+// • null / undefined → []
+// • already an array → returned as-is
+// • object with numeric keys → values in key order
+function asArray(v) {
+  if (Array.isArray(v)) return v;
+  if (v == null)        return [];
+  if (typeof v === 'object') return Object.values(v);
+  return [];
+}
+
+// Walk every card-containing pile and report duplicates or missing cards.
+// Total across drawPile + all hands + discard piles + laid-down groups
+// should always equal 52 in a synced game. If we ever see a duplicate
+// of the same {rank, suit}, something has gone wrong with sync.
+function checkDeckIntegrity(label) {
+  const counts = {};
+  let total = 0;
+  const tally = (card, location) => {
+    if (!card || !card.rank || !card.suit) return;
+    const key = card.rank + card.suit;
+    if (!counts[key]) counts[key] = [];
+    counts[key].push(location);
+    total++;
+  };
+  (state.drawPile || []).forEach(c => tally(c, 'drawPile'));
+  (state.players || []).forEach((p, i) => {
+    (p.hand        || []).forEach(c => tally(c, 'p' + i + ' hand'));
+    (p.discardPile || []).forEach(c => tally(c, 'p' + i + ' discard'));
+    (p.laidDown    || []).forEach((g, gi) => {
+      (g || []).forEach(c => tally(c, 'p' + i + ' laid#' + gi));
+    });
+  });
+  const dupes = Object.entries(counts).filter(([k, locs]) => locs.length > 1);
+  if (dupes.length > 0) {
+    console.error('[MP] DUPLICATE CARDS @ "' + label + '":', dupes);
+  }
+  if (total !== 52) {
+    console.warn('[MP] CARD COUNT @ "' + label + '" — found ' + total + ' (expected 52)');
+  }
 }
 
 // ── Publishing (debounced) ───────────────────────────────────
