@@ -519,17 +519,15 @@ function applyPlayerCfgToDom() {
 // seat — render code that does document.getElementById('hand-1') still
 // works, the element has just been re-parented into a different zone.
 function setupLocalView() {
-  // 1. Inline dp + phoms for every zone (move them out of #center's
-  //    side panels into their absolute-seat zones).
-  for (let abs = 0; abs < 4; abs++) {
-    const zone  = document.getElementById('zone-' + abs);
-    const dp    = document.getElementById('dp-' + abs);
-    const phoms = document.getElementById('phoms-' + abs);
-    if (!zone || !dp || !phoms) continue;
-    if (zone.contains(dp)) continue; // already inline (e.g. seats 0 and 2)
+  const center = document.getElementById('center');
 
-    const row = document.createElement('div');
-    row.className = 'dp-phoms-row';
+  // Helper to build either an inline dp-phoms-row (for top/bottom zones)
+  // or a center side-panel (for left/right zones). The internal structure
+  // is the same (discard-section + phom-section); only the wrapper class
+  // and flex direction differ.
+  function buildDpPhomsContainer(dp, phoms, wrapperClass, isSideWithPhomsClass) {
+    const wrap = document.createElement('div');
+    wrap.className = wrapperClass;
 
     const dSec = document.createElement('div');
     dSec.className = 'panel-section discard-section';
@@ -545,19 +543,61 @@ function setupLocalView() {
     pLab.className = 'section-label';
     pLab.textContent = 'Phỏm';
     pSec.appendChild(pLab);
+    if (isSideWithPhomsClass) phoms.classList.add('side-phoms');
+    else                      phoms.classList.remove('side-phoms');
     pSec.appendChild(phoms);
 
-    row.appendChild(dSec);
-    row.appendChild(pSec);
-    zone.appendChild(row);
+    wrap.appendChild(dSec);
+    wrap.appendChild(pSec);
+    return wrap;
   }
 
-  // Remove the (now empty) side-panel containers from #center.
-  // Re-center the draw pile since it's the only thing left in #center
-  // (the default space-between rule would push it to the left).
+  // 1. Detach every dp + phoms from their current parents (zone or center
+  //    side-panel) so we can re-place each in its correct container based
+  //    on its LOCAL position relative to MY_ABSOLUTE_SEAT.
+  for (let abs = 0; abs < 4; abs++) {
+    const dp    = document.getElementById('dp-' + abs);
+    const phoms = document.getElementById('phoms-' + abs);
+    if (dp    && dp.parentNode)    dp.parentNode.removeChild(dp);
+    if (phoms && phoms.parentNode) phoms.parentNode.removeChild(phoms);
+  }
+  // Wipe the empty dp-phoms-row wrappers + side-panel wrappers we just
+  // emptied so we can rebuild cleanly.
+  document.querySelectorAll('.dp-phoms-row').forEach(r => r.remove());
   document.querySelectorAll('#center .side-panel').forEach(p => p.remove());
-  const center = document.getElementById('center');
-  if (center) center.style.justifyContent = 'center';
+
+  // 2. Place each dp + phoms based on its LOCAL position.
+  //    Local 0 (bottom) and 2 (top): inline dp-phoms-row inside the zone.
+  //    Local 1 (left) and 3 (right): #center side-panel.
+  //    This mirrors the original solo layout exactly — keeps left/right
+  //    zones narrow so the grid rows don't overflow.
+  const pile = center.querySelector('.pile-wrap');
+  for (let abs = 0; abs < 4; abs++) {
+    const local = (abs - MY_ABSOLUTE_SEAT + 4) % 4;
+    const dp    = document.getElementById('dp-' + abs);
+    const phoms = document.getElementById('phoms-' + abs);
+    if (!dp || !phoms) continue;
+
+    if (local === 0 || local === 2) {
+      // Inline in the zone (bottom or top)
+      const zone = document.getElementById('zone-' + abs);
+      if (zone) {
+        const row = buildDpPhomsContainer(dp, phoms, 'dp-phoms-row', false);
+        zone.appendChild(row);
+      }
+    } else {
+      // Side panel in #center (left or right)
+      const panel = buildDpPhomsContainer(dp, phoms, 'side-panel', true);
+      if (local === 1) {
+        // local-left → left side of center (before pile)
+        if (pile) center.insertBefore(panel, pile);
+        else      center.appendChild(panel);
+      } else {
+        // local-right → right side of center (after pile)
+        center.appendChild(panel);
+      }
+    }
+  }
 
   // 2. Rebuild each zone's child order based on whether it's the local
   //    bottom (has full controls) or a non-bottom (just player-info,
