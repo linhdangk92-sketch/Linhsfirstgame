@@ -130,9 +130,13 @@ function showHumanUKhanPrompt() {
 function showStealDrawUI(canDoSteal, disc) {
   state.phase = 'steal-prompt';
 
+  // MULTIPLAYER: use MY_ABSOLUTE_SEAT so a guest at seat 1/2/3 acts on
+  // their own seat. In solo mode MY_ABSOLUTE_SEAT defaults to 0.
+  const localSeat = (typeof MY_ABSOLUTE_SEAT !== 'undefined') ? MY_ABSOLUTE_SEAT : 0;
+
   const btnSteal = makeBtn('Steal', 'btn-steal', () => {
     clearAllTimers(); clearStealable();
-    performSteal(0);
+    performSteal(localSeat);
   });
   if (!canDoSteal) {
     btnSteal.disabled = true;
@@ -141,7 +145,7 @@ function showStealDrawUI(canDoSteal, disc) {
 
   const btnDraw = makeBtn('Draw', 'btn-draw', () => {
     clearAllTimers(); clearStealable();
-    performDraw(0);
+    performDraw(localSeat);
   });
 
   const promptMsg = canDoSteal
@@ -184,7 +188,7 @@ function showStealDrawUI(canDoSteal, disc) {
     if (timeLeft <= 0) {
       clearInterval(timers.steal); timers.steal = null;
       clearStealable();
-      performDraw(0); // auto-draw when timer expires
+      performDraw(localSeat); // auto-draw when timer expires
     }
   }, 1000);
 }
@@ -477,7 +481,8 @@ function showDiscardUI() {
     setStatus('Drag a card to the center to discard it.', timeLeft + 's');
     if (timeLeft <= 0) {
       clearInterval(timers.discard); timers.discard = null;
-      performDiscard(0, aiBestDiscard(state.players[0].hand, 'easy', 0));
+      const seat = (typeof MY_ABSOLUTE_SEAT !== 'undefined') ? MY_ABSOLUTE_SEAT : 0;
+      performDiscard(seat, aiBestDiscard(state.players[seat].hand, 'easy', seat));
     }
   }, 1000);
 }
@@ -781,20 +786,23 @@ function runAiExtraTurn() {
    (c) Continue button (steal or gửi available, no forced action), or
    (d) Pass button (nothing actionable). */
 function startHumanExtraTurn() {
-  const player     = state.players[0];
+  // MULTIPLAYER: use MY_ABSOLUTE_SEAT so a guest's extra turn references
+  // their own seat. In solo, MY_ABSOLUTE_SEAT defaults to 0.
+  const seat = (typeof MY_ABSOLUTE_SEAT !== 'undefined') ? MY_ABSOLUTE_SEAT : 0;
+  const player     = state.players[seat];
   const disc       = state.lastDiscard;
   const canDoSteal = disc && canSteal(disc, player.hand);
   const countShort = player.discardCount < DISCARD_PILE_LIMIT;
   const canDraw    = countShort && state.drawPile.length > 0;
   const canRacFallback = countShort && state.drawPile.length === 0 && player.hand.length > 0;
-  const guiOptions = findGuiOptions(0);
+  const guiOptions = findGuiOptions(seat);
 
   const items = [];
 
   if (canDoSteal) {
     items.push(makeBtn('Steal ' + disc.rank + disc.suit, 'btn-steal', () => {
       clearStealable();
-      performSteal(0);
+      performSteal(seat);
     }));
     highlightStealable((state.currentTurn - 1 + 4) % 4);
   }
@@ -802,7 +810,7 @@ function startHumanExtraTurn() {
   if (canDraw) {
     items.push(makeBtn('Draw', 'btn-draw', () => {
       clearStealable();
-      performDraw(0);
+      performDraw(seat);
     }));
     setStatus('Extra turn — ' + (canDoSteal ? 'steal or draw + discard' : 'must draw and discard'));
   } else if (canRacFallback) {
@@ -815,7 +823,7 @@ function startHumanExtraTurn() {
               : 'Extra turn — gửi opportunity available');
     items.push(makeBtn(canDoSteal ? 'Skip steal' : 'Continue', 'btn-draw', () => {
       clearStealable();
-      handleGuiStep(0, finishHumanExtraTurn);
+      handleGuiStep(seat, finishHumanExtraTurn);
     }));
   } else {
     setStatus('Extra turn — nothing to do, pass?');

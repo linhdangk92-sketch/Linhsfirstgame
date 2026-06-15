@@ -92,7 +92,11 @@ function sortBySuit(hand) {
    so the WHOLE hand area is a forgiving drop target — we figure out which gap
    the cursor is closest to by comparing its X position to each card's center. */
 function renderHumanHand(isDiscardPhase) {
-  const handEl = document.getElementById('hand-0');
+  // MULTIPLAYER: the local player isn't always seat 0 — they sit wherever
+  // they joined. MY_ABSOLUTE_SEAT defaults to 0 in solo so behavior is
+  // unchanged there.
+  const localSeat = (typeof MY_ABSOLUTE_SEAT !== 'undefined') ? MY_ABSOLUTE_SEAT : 0;
+  const handEl = document.getElementById('hand-' + localSeat);
   handEl.innerHTML = '';
   let dragSrcIdx = null;
   /* Used by the discard-phase fan-out heuristic. We snapshot the cursor X at
@@ -103,7 +107,7 @@ function renderHumanHand(isDiscardPhase) {
   let dragStartX = 0;
   const HAND_FANOUT_DX = 30;
 
-  const hand = state.players[0].hand;
+  const hand = state.players[localSeat].hand;
 
   /* P7: during discard phase, identify the cards that are part of the
      optimal phỏm partition so they can be visually highlighted (green
@@ -131,11 +135,11 @@ function renderHumanHand(isDiscardPhase) {
   const sortRankBtn = document.getElementById('sort-rank');
   const sortSuitBtn = document.getElementById('sort-suit');
   if (sortRankBtn) sortRankBtn.onclick = () => {
-    state.players[0].hand = sortByRank(state.players[0].hand);
+    state.players[localSeat].hand = sortByRank(state.players[localSeat].hand);
     renderHumanHand(state.phase === 'discard-prompt');
   };
   if (sortSuitBtn) sortSuitBtn.onclick = () => {
-    state.players[0].hand = sortBySuit(state.players[0].hand);
+    state.players[localSeat].hand = sortBySuit(state.players[localSeat].hand);
     renderHumanHand(state.phase === 'discard-prompt');
   };
 
@@ -238,7 +242,7 @@ function renderHumanHand(isDiscardPhase) {
         const card = hand[dragSrcIdx];
         dragSrcIdx = null;
         clearAllTimers();
-        performDiscard(0, card);
+        performDiscard(localSeat, card);
       };
     } else {
       discardZoneEl.classList.remove('discard-mode');
@@ -317,12 +321,14 @@ function renderHumanHand(isDiscardPhase) {
    gets a subtle .hand-revealed outline as a visual cue. */
 function renderHands() {
   const revealAll = state.phase === 'scoring' || state.phase === 'gameover';
+  // MULTIPLAYER: the LOCAL human is whoever's seat we sit at, not always 0.
+  const localSeat = (typeof MY_ABSOLUTE_SEAT !== 'undefined') ? MY_ABSOLUTE_SEAT : 0;
 
   state.players.forEach((player, idx) => {
     const revealed = revealAll || player.hasLaidDown;
     const handEl   = document.getElementById('hand-' + idx);
 
-    if (idx === 0) {
+    if (idx === localSeat) {
       if (state.phase !== 'discard-prompt') renderHumanHand(false);
     } else {
       handEl.innerHTML = '';
@@ -451,14 +457,16 @@ function getCardRectInHand(playerIdx, card) {
   if (!handEl) return null;
   const cardEls = handEl.querySelectorAll('.card');
   if (cardEls.length === 0) return null;
-  if (playerIdx === 0) {
-    const cardIdx = state.players[0].hand.indexOf(card);
+  // MULTIPLAYER: the local face-up player is MY_ABSOLUTE_SEAT, not always 0.
+  const localSeat = (typeof MY_ABSOLUTE_SEAT !== 'undefined') ? MY_ABSOLUTE_SEAT : 0;
+  if (playerIdx === localSeat) {
+    const cardIdx = state.players[localSeat].hand.indexOf(card);
     if (cardIdx >= 0 && cardIdx < cardEls.length) {
       return cardEls[cardIdx].getBoundingClientRect();
     }
     return null;
   }
-  // AI: any face-down card position represents the same visual location
+  // AI / opponent: any face-down card position represents the same visual location
   return cardEls[cardEls.length - 1].getBoundingClientRect();
 }
 

@@ -410,52 +410,34 @@ function driveTurn() {
 }
 
 // ── Build PLAYER_CFG from lobby ──────────────────────────────
-// Lobby holds the humans + their seats. Session 2 limitation: ONLY the
-// host (seat 0) is treated as a real human for game logic. Guest humans
-// keep their name on the seat pill but are AI-controlled (host's
-// browser plays their turn). Session 3 will add real interactivity for
-// guests (DOM rotation + action protocol via Firebase).
+// Lobby holds the humans + their seats. Each human stays isHuman:true
+// so their turn waits for their own browser to act (via the startTurn
+// gate + driveTurn). Empty seats are filled with AI bots controlled
+// by the host's browser.
 function buildMultiplayerPlayerCfg(lobbyPlayers) {
   const cfg = [null, null, null, null];
-  const difficulties = ['easy', 'medium', 'hard'].sort(() => Math.random() - 0.5);
-  let diffIdx = 0;
-
-  // Place all joined players first (host stays human, guests become AI)
   Object.values(lobbyPlayers).forEach(p => {
-    if (p.seat === 0) {
-      cfg[0] = {
-        name:       p.name,
-        isHuman:    true,
-        difficulty: null,
-        zoneId:     'zone-0',
-      };
-    } else {
-      // Guest human → AI-controlled with their nickname for now
-      cfg[p.seat] = {
-        name:       p.name,
-        isHuman:    false,
-        difficulty: difficulties[diffIdx % difficulties.length],
-        zoneId:     'zone-' + p.seat,
-      };
-      diffIdx++;
-    }
+    cfg[p.seat] = {
+      name:       p.name,
+      isHuman:    true,
+      difficulty: null,
+      zoneId:     'zone-' + p.seat,
+    };
   });
-
-  // Fill remaining empty seats with random AI from the name pool
   const emptyCount = cfg.filter(c => c === null).length;
   if (emptyCount > 0) {
     const aiNames = pickNames(emptyCount);
+    const difficulties = ['easy', 'medium', 'hard'].sort(() => Math.random() - 0.5);
     let aiIdx = 0;
     for (let i = 0; i < 4; i++) {
       if (cfg[i] === null) {
         cfg[i] = {
           name:       aiNames[aiIdx],
           isHuman:    false,
-          difficulty: difficulties[diffIdx % difficulties.length],
+          difficulty: difficulties[aiIdx % difficulties.length],
           zoneId:     'zone-' + i,
         };
         aiIdx++;
-        diffIdx++;
       }
     }
   }
@@ -488,6 +470,7 @@ async function transitionToMultiplayerGame() {
   console.log('[MP] my seat is ' + MY_ABSOLUTE_SEAT);
 
   applyPlayerCfgToDom();
+  setupLocalView();          // rotate DOM so I'm at the bottom
   closeLobbyModal();
   subscribeToGameState();
 
@@ -511,6 +494,123 @@ function applyPlayerCfgToDom() {
         : (AVATAR_MAP[PLAYER_CFG[i].name] || '🃏');
     }
   });
+}
+
+// ── DOM rotation — put MY zone at the bottom ─────────────────
+// At multiplayer game start, do one-time DOM surgery so the local
+// player always sees themselves at the bottom of the table with full
+// controls (action bar, sort toolbar, draggable hand, discard zone).
+//
+// What changes:
+//   1. dp-1 + phoms-1 (and dp-3 + phoms-3) move out of #center's side
+//      panels and into their respective zone divs as inline dp-phoms-row.
+//      All 4 zones now have a uniform structure: player-info, hand-N,
+//      and dp-phoms-row inline.
+//   2. The bottom-only elements (#action-bar, .hand-toolbar, #discard-zone)
+//      move from zone-0 into zone-MY_ABSOLUTE_SEAT.
+//   3. The "sm-hand" class is swapped: removed from hand-MY, added to
+//      hand-0 (so the local player's hand renders full-size and the
+//      original host slot becomes a regular opponent slot).
+//   4. Zone CSS classes (bottom / left / top / right) are reassigned
+//      based on each seat's local position relative to MY_ABSOLUTE_SEAT.
+//      The existing grid-area CSS positions zones based on these classes.
+//
+// All element IDs (hand-N, dp-N, phoms-N) STAY tied to their absolute
+// seat — render code that does document.getElementById('hand-1') still
+// works, the element has just been re-parented into a different zone.
+function setupLocalView() {
+  // 1. Inline dp + phoms for every zone (move them out of #center's
+  //    side panels into their absolute-seat zones).
+  for (let abs = 0; abs < 4; abs++) {
+    const zone  = document.getElementById('zone-' + abs);
+    const dp    = document.getElementById('dp-' + abs);
+    const phoms = document.getElementById('phoms-' + abs);
+    if (!zone || !dp || !phoms) continue;
+    if (zone.contains(dp)) continue; // already inline (e.g. seats 0 and 2)
+
+    const row = document.createElement('div');
+    row.className = 'dp-phoms-row';
+
+    const dSec = document.createElement('div');
+    dSec.className = 'panel-section discard-section';
+    const dLab = document.createElement('div');
+    dLab.className = 'section-label';
+    dLab.textContent = 'Discards';
+    dSec.appendChild(dLab);
+    dSec.appendChild(dp);
+
+    const pSec = document.createElement('div');
+    pSec.className = 'panel-section phom-section';
+    const pLab = document.createElement('div');
+    pLab.className = 'section-label';
+    pLab.textContent = 'Phỏm';
+    pSec.appendChild(pLab);
+    pSec.appendChild(phoms);
+
+    row.appendChild(dSec);
+    row.appendChild(pSec);
+    zone.appendChild(row);
+  }
+
+  // Remove the (now empty) side-panel containers from #center.
+  // Re-center the draw pile since it's the only thing left in #center
+  // (the default space-between rule would push it to the left).
+  document.querySelectorAll('#center .side-panel').forEach(p => p.remove());
+  const center = document.getElementById('center');
+  if (center) center.style.justifyContent = 'center';
+
+  // 2. Rebuild each zone's child order based on whether it's the local
+  //    bottom (has full controls) or a non-bottom (just player-info,
+  //    hand, dp-phoms-row). appendChild moves existing nodes — event
+  //    listeners survive.
+  const actionBar   = document.getElementById('action-bar');
+  const handToolbar = document.querySelector('.hand-toolbar');
+  const discardZone = document.getElementById('discard-zone');
+
+  for (let abs = 0; abs < 4; abs++) {
+    const zone = document.getElementById('zone-' + abs);
+    if (!zone) continue;
+    const playerInfo = zone.querySelector('.player-info');
+    const hand       = document.getElementById('hand-' + abs);
+    const dpPhomsRow = zone.querySelector('.dp-phoms-row');
+    const isBottom = (abs === MY_ABSOLUTE_SEAT);
+
+    // Re-append in desired order. Each appendChild moves the node to
+    // the end of `zone`. Order = original zone-0 (bottom) layout for
+    // local-bottom, or the non-bottom layout for everything else.
+    if (isBottom) {
+      if (actionBar)   zone.appendChild(actionBar);
+      if (dpPhomsRow)  zone.appendChild(dpPhomsRow);
+      if (handToolbar) zone.appendChild(handToolbar);
+      if (hand)        zone.appendChild(hand);
+      if (discardZone) zone.appendChild(discardZone);
+      if (playerInfo)  zone.appendChild(playerInfo);
+    } else {
+      if (playerInfo)  zone.appendChild(playerInfo);
+      if (hand)        zone.appendChild(hand);
+      if (dpPhomsRow)  zone.appendChild(dpPhomsRow);
+    }
+  }
+
+  // 3. Swap the sm-hand class so MY hand renders full-size and the old
+  //    zone-0 hand becomes small (face-down).
+  if (MY_ABSOLUTE_SEAT !== 0) {
+    const myHand    = document.getElementById('hand-' + MY_ABSOLUTE_SEAT);
+    const seat0Hand = document.getElementById('hand-0');
+    if (myHand)    myHand.classList.remove('sm-hand');
+    if (seat0Hand) seat0Hand.classList.add('sm-hand');
+  }
+
+  // 4. Assign zone position classes (bottom / left / top / right) based
+  //    on each absolute seat's local position relative to me.
+  const posByLocal = ['bottom', 'left', 'top', 'right'];
+  for (let abs = 0; abs < 4; abs++) {
+    const local = (abs - MY_ABSOLUTE_SEAT + 4) % 4;
+    const zone = document.getElementById('zone-' + abs);
+    if (!zone) continue;
+    zone.classList.remove('bottom', 'left', 'top', 'right');
+    zone.classList.add(posByLocal[local]);
+  }
 }
 
 // ── Leave the lobby ─────────────────────────────────────────
