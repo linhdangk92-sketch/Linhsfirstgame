@@ -2,6 +2,21 @@
 // PHOM — validation and detection of valid phỏm combinations
 // ═══════════════════════════════════════════════════════════════════
 
+/* Find a card in an array by VALUE (rank+suit). Returns the index or -1.
+   Used instead of arr.indexOf(card) because the multiplayer applyGameState
+   re-instantiates every card object from Firebase — so reference equality
+   between a card captured before the update and a card in the post-update
+   state no longer works. Without this, a discard would fail to remove the
+   card from the hand and end up duplicating it in the discard pile. */
+function cardIndexInArray(arr, target) {
+  if (!arr || !target) return -1;
+  for (let i = 0; i < arr.length; i++) {
+    const c = arr[i];
+    if (c && c.rank === target.rank && c.suit === target.suit) return i;
+  }
+  return -1;
+}
+
 /* Sám Cô: 3 or 4 cards of the same rank, any suits */
 function isSamCo(cards) {
   return cards.length >= 3 && cards.length <= 4 &&

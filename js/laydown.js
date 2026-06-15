@@ -9,9 +9,16 @@
 function lockInPhoms(playerIdx, groups) {
   const player = state.players[playerIdx];
   groups.forEach(group => {
-    group.forEach(card => {
-      const i = player.hand.indexOf(card);
-      if (i !== -1) player.hand.splice(i, 1);
+    // Replace each card in the group with the hand-resident object (matched
+    // by VALUE) and remove it from the hand. cardIndexInArray uses rank+suit
+    // equality instead of object reference, which matters in multiplayer
+    // where applyGameState re-instantiates card objects from Firebase.
+    group.forEach((card, gi) => {
+      const i = cardIndexInArray(player.hand, card);
+      if (i !== -1) {
+        group[gi] = player.hand[i];
+        player.hand.splice(i, 1);
+      }
     });
     player.laidDown.push(group);
   });
@@ -33,8 +40,12 @@ function lockInPhoms(playerIdx, groups) {
 function layDownStolenPhom(playerIdx, stolenCard, onDone) {
   const player = state.players[playerIdx];
   // The stolen card was already pushed onto the hand by performSteal.
-  // Strip it out so findStealPhoms doesn't see it twice.
-  const handMinusStolen = player.hand.filter(c => c !== stolenCard);
+  // Strip it out so findStealPhoms doesn't see it twice. Multiplayer
+  // applyGameState may have re-instantiated the card object — so we
+  // remove by VALUE (rank+suit) and skip only ONE matching card
+  // (the stolen one), not all cards of that value.
+  const stolenIdx = cardIndexInArray(player.hand, stolenCard);
+  const handMinusStolen = player.hand.filter((c, i) => i !== stolenIdx);
   const options = findStealPhoms(stolenCard, handMinusStolen);
 
   if (options.length === 0) {
@@ -225,9 +236,13 @@ function findGuiOptions(playerIdx) {
    phỏm or had its last rác removed), so callers can short-circuit. */
 function applyGui(playerIdx, card, targetIdx, groupIdx) {
   const hand = state.players[playerIdx].hand;
-  const i    = hand.indexOf(card);
+  // VALUE equality (multiplayer applyGameState swaps card references —
+  // without cardIndexInArray, the card stays in hand and gets duplicated
+  // into the opponent's phỏm group).
+  const i = cardIndexInArray(hand, card);
+  const actualCard = i !== -1 ? hand[i] : card;
   if (i !== -1) hand.splice(i, 1);
-  state.players[targetIdx].laidDown[groupIdx].push(card);
+  state.players[targetIdx].laidDown[groupIdx].push(actualCard);
 
   // Multiplayer: publish so spectators see the gửi land in real time.
   if (typeof publishGameStateAsync === 'function') publishGameStateAsync();

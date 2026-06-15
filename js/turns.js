@@ -309,9 +309,14 @@ function performSteal(playerIdx) {
   // doesn't muddle the reading.
   const victimWasAtFinal = state.players[prevIdx].discardCount === DISCARD_PILE_LIMIT;
 
-  // Step 1: physically remove the card from the stolen-from player's pile
+  // Step 1: physically remove the card from the stolen-from player's pile.
+  // Use cardIndexInArray (VALUE equality on rank+suit) instead of indexOf
+  // — multiplayer applyGameState re-instantiates card objects from
+  // Firebase so reference equality between `card` (a previous state.lastDiscard)
+  // and the cards in prevPile no longer holds. Without this, the card
+  // stays in the pile AND lands in the stealer's hand → duplicate card.
   const prevPile = state.players[prevIdx].discardPile;
-  const ci = prevPile.indexOf(card);
+  const ci = cardIndexInArray(prevPile, card);
   if (ci !== -1) prevPile.splice(ci, 1);
   state.players[prevIdx].discardCount--;   // they lost one discard
 
@@ -500,12 +505,18 @@ function performDiscard(playerIdx, card) {
 
   const player = state.players[playerIdx];
 
-  // Remove the card from the player's hand
-  const idx = player.hand.indexOf(card);
+  // Remove the card from the player's hand — VALUE equality (multiplayer
+  // applyGameState swaps card references, so indexOf-by-reference can fail
+  // to find the card and leave a duplicate in the hand).
+  const idx = cardIndexInArray(player.hand, card);
+  // Grab the actual hand-resident object (not the parameter, which may be
+  // a stale pre-update reference) so the discard pile holds the same
+  // {rank, suit} the hand just released.
+  const actualCard = idx !== -1 ? player.hand[idx] : card;
   if (idx !== -1) player.hand.splice(idx, 1);
 
   // Put it in their personal discard pile and increment the true discard count
-  player.discardPile.push(card);
+  player.discardPile.push(actualCard);
   player.discardCount++;
 
   // This card is now available for the next player to steal

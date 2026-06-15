@@ -460,7 +460,8 @@ function getCardRectInHand(playerIdx, card) {
   // MULTIPLAYER: the local face-up player is MY_ABSOLUTE_SEAT, not always 0.
   const localSeat = (typeof MY_ABSOLUTE_SEAT !== 'undefined') ? MY_ABSOLUTE_SEAT : 0;
   if (playerIdx === localSeat) {
-    const cardIdx = state.players[localSeat].hand.indexOf(card);
+    // VALUE equality — multiplayer card refs change across applyGameState.
+    const cardIdx = cardIndexInArray(state.players[localSeat].hand, card);
     if (cardIdx >= 0 && cardIdx < cardEls.length) {
       return cardEls[cardIdx].getBoundingClientRect();
     }
