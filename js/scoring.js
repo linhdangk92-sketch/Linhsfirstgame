@@ -312,6 +312,32 @@ function declareTriggerTwo(stealerIdx, victimIdx) {
   }, 4000 + 2500 + 400);
 }
 
+/* Compute the ranked round-end results from the CURRENT state, without
+   mutating anything. Returns the same `results` array endRound builds —
+   each entry has { idx, name, racTotal, isMom, lapClosedAt, momPosition,
+   total }. Used by the multiplayer listener to re-show the recap modal
+   on every browser using the same data the active player saw. */
+function computeRoundEndResults() {
+  const results = state.players.map((p, i) => ({
+    idx:         i,
+    name:        PLAYER_CFG[i].name,
+    racTotal:    (p.hand || []).reduce((sum, c) => sum + RANK_VALUE[c.rank], 0),
+    isMom:       p.isMom,
+    lapClosedAt: p.lapClosedAt,
+    total:       p.roundScore || 0,
+  }));
+  results.sort((a, b) => {
+    if (a.isMom !== b.isMom) return a.isMom ? 1 : -1;
+    if (a.isMom)             return a.lapClosedAt - b.lapClosedAt;
+    return a.racTotal - b.racTotal;
+  });
+  let momIdx = 0;
+  results.forEach(r => {
+    if (r.isMom) { momIdx++; r.momPosition = momIdx; }
+  });
+  return results;
+}
+
 /* Called when all players have laid down. Ranks players by rác total, applies
    placement points + Móm penalty, then shows a recap modal as the reveal
    step. cumScore is updated immediately (so state stays consistent) but
@@ -391,6 +417,16 @@ function endRound() {
   // Bright four-note arpeggio when a normal round-end win is revealed.
   // Lighter than soundU so it doesn't compete with the Ù fanfare.
   soundRoundWin();
+
+  // MULTIPLAYER: don't show the recap modal locally — the gameState
+  // listener (multiplayer.js) detects phase=scoring on every browser and
+  // shows the modal there. That keeps every player seeing the recap, with
+  // the host-only Next Round button wired by the listener. In solo mode
+  // (IS_MULTIPLAYER_GAME undefined or false) we fall through to the
+  // original local show below.
+  if (typeof IS_MULTIPLAYER_GAME !== 'undefined' && IS_MULTIPLAYER_GAME) {
+    return;
+  }
 
   // The reveal: modal with the breakdown + "Add to Scoreboard" button.
   // Clicking the button calls renderScores (scoreboard finally updates) and

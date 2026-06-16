@@ -93,7 +93,12 @@ function startHumanTurn() {
     return;
   }
   const prevIdx    = (state.currentTurn - 1 + 4) % 4;
-  const canDoSteal = canSteal(disc, state.players[0].hand);
+  // MULTIPLAYER: check steal-ability against MY hand, not seat 0's.
+  // For a guest at seat 1/2/3, state.players[0].hand is the host's hand
+  // — using that would say "you can steal" only when the HOST could,
+  // never when the guest actually has matching cards.
+  const localSeat  = (typeof MY_ABSOLUTE_SEAT !== 'undefined') ? MY_ABSOLUTE_SEAT : 0;
+  const canDoSteal = canSteal(disc, state.players[localSeat].hand);
   highlightStealable(prevIdx);
   showStealDrawUI(canDoSteal, disc);
 }

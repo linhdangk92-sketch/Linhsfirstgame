@@ -137,10 +137,15 @@ function renderHumanHand(isDiscardPhase) {
   if (sortRankBtn) sortRankBtn.onclick = () => {
     state.players[localSeat].hand = sortByRank(state.players[localSeat].hand);
     renderHumanHand(state.phase === 'discard-prompt');
+    // MULTIPLAYER: publish the new hand order so it survives the next
+    // state sync. Without this, the very next AI/opponent action
+    // republishes the OLD pre-sort order, clobbering the sort.
+    if (typeof publishGameStateAsync === 'function') publishGameStateAsync();
   };
   if (sortSuitBtn) sortSuitBtn.onclick = () => {
     state.players[localSeat].hand = sortBySuit(state.players[localSeat].hand);
     renderHumanHand(state.phase === 'discard-prompt');
+    if (typeof publishGameStateAsync === 'function') publishGameStateAsync();
   };
 
   /* Given a cursor X coordinate in viewport pixels, return the gap index the

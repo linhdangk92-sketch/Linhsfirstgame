@@ -437,7 +437,58 @@ function subscribeToGameState() {
       // Small delay so render lands before any interactive UI appears
       setTimeout(driveTurn, 50);
     }
+    // Recap modal: show on EVERY browser when the round ends
+    // (state.phase === 'scoring'). Close when phase moves away from
+    // scoring (host clicked Next Round → new deal in progress).
+    if (state.phase === 'scoring') {
+      showRecapModalForMultiplayer();
+    } else {
+      closeRecapModalIfOpen();
+    }
   });
+}
+
+// Show the round-end recap modal locally, once per round-end. Computes
+// the results from the synced state (matches what the active player's
+// endRound saw). Only the host gets the Next Round button — guests see
+// a "waiting for host" status while the host decides.
+function showRecapModalForMultiplayer() {
+  // Skip if a recap is already on screen (prevents double-show when the
+  // active player's endRound published state and the listener echoes back).
+  if (document.querySelector('.recap-overlay')) return;
+  if (typeof computeRoundEndResults !== 'function') return;
+
+  const results = computeRoundEndResults();
+  showRoundRecap(state.roundNumber, results, () => {
+    renderScores();
+    const isLastRound = state.roundNumber >= TOTAL_ROUNDS;
+    if (_mpIsHost) {
+      renderActionBar([makeBtn(
+        isLastRound ? 'See Final Results' : 'Next Round →',
+        'btn-laydown',
+        () => {
+          if (isLastRound) {
+            showGameOver();
+          } else {
+            state.roundNumber++;
+            dealRound();
+          }
+        }
+      )]);
+    } else {
+      // Guest: only the host can advance the round.
+      setStatus('Waiting for host to start the next round…');
+    }
+  });
+}
+
+// Remove the recap modal if it's currently on screen (called when the
+// listener detects phase moving away from 'scoring' — e.g. host clicked
+// Next Round and the new deal is in progress, so every browser closes
+// its recap to reveal the fresh round underneath).
+function closeRecapModalIfOpen() {
+  const overlay = document.querySelector('.recap-overlay');
+  if (overlay) overlay.remove();
 }
 
 // Decide whether THIS browser should drive the current turn.
